@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TMS Lessul</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <aside class="sidebar">
+    <h1>TMS Lessul</h1>
+    <nav>
+      <a href="#" data-view="dashboard">Dashboard</a>
+      <a href="#" data-view="orders">Pedidos</a>
+      <a href="#" data-view="quotes">Cotação</a>
+      <a href="#" data-view="shipments">Embarques/Tracking</a>
+    </nav>
+  </aside>
+  <main>
+    <header class="toolbar">
+      <input id="apiKey" placeholder="x-api-key" />
+      <button id="reloadBtn" class="primary">Atualizar</button>
+    </header>
+    <section id="app"></section>
+  </main>
+  <script src="app.js" type="module"></script>
+</body>
+</html>
