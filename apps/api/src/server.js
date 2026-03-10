@@ -6,6 +6,7 @@ import { registerDashboardRoutes } from './routes/dashboard.js';
 import { registerShipmentRoutes } from './routes/shipments.js';
 import { registerTrackingRoutes } from './routes/tracking.js';
 import { registerFreightTableRoutes } from './routes/freightTables.js';
+import { runWithDbContext } from './db.js';
 
 const app = router();
 registerOrderRoutes(app);
@@ -18,11 +19,13 @@ registerDashboardRoutes(app);
 app.get('/health', async () => ({ ok: true }));
 
 const server = http.createServer(async (req, res) => {
-  const handled = await app.handle(req, res);
-  if (!handled) {
-    res.writeHead(404, { 'content-type': 'application/json' });
-    res.end(JSON.stringify({ error: 'Not found' }));
-  }
+  await runWithDbContext(null, async () => {
+    const handled = await app.handle(req, res);
+    if (!handled) {
+      res.writeHead(404, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Not found' }));
+    }
+  });
 });
 
 server.listen(process.env.PORT || 3001, () => {
