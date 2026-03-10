@@ -61,7 +61,7 @@ async function createAndCalculateQuote({ accountId, body, requestHash }) {
     const inserted = await query(
       `insert into app.quote_requests(account_id, order_id, destination_postal_code, invoice_amount, payload, request_hash)
        values($1,$2,$3,$4,$5,$6) returning *`,
-      [accountId, body.orderId || null, body.destinationPostalCode, Number(body.invoiceAmount || 0), body, requestHash]
+      [accountId, body.orderId || null, body.destinationPostalCode, Number(body.invoiceAmount || 0), toJson(body), requestHash]
     );
     request = inserted.rows[0];
   }
@@ -92,7 +92,16 @@ async function createAndCalculateQuote({ accountId, body, requestHash }) {
     const ins = await query(
       `insert into app.quote_results(request_id, account_id, carrier_id, total_amount, total_days, ranking, breakdown, applied_rules)
        values($1,$2,$3,$4,$5,$6,$7,$8) returning *`,
-      [request.id, accountId, option.carrierId, option.totalAmount, option.totalDays, option.ranking, { ...option.breakdown, justification: option.justification }, option.appliedRules]
+      [
+        request.id,
+        accountId,
+        option.carrierId,
+        option.totalAmount,
+        option.totalDays,
+        option.ranking,
+        toJson({ ...option.breakdown, justification: option.justification }),
+        toJson(option.appliedRules || [])
+      ]
     );
     persisted.push(ins.rows[0]);
   }
@@ -101,4 +110,9 @@ async function createAndCalculateQuote({ accountId, body, requestHash }) {
 
 function hashRequest(payload) {
   return crypto.createHash('sha256').update(JSON.stringify(payload)).digest('hex');
+}
+
+
+function toJson(value) {
+  return JSON.stringify(value ?? {});
 }
