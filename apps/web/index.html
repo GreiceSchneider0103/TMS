@@ -10,56 +10,19 @@
   <aside class="sidebar">
     <h1>TMS Lessul</h1>
     <nav>
-      <a href="#">Dashboard</a>
-      <a href="#">Pedidos</a>
-      <a href="#">Nova Cotação</a>
-      <a href="#">Tabelas de frete</a>
-      <a href="#">Tracking</a>
-      <a href="#">Integrações</a>
-      <a href="#">Auditoria</a>
+      <a href="#" data-view="dashboard">Dashboard</a>
+      <a href="#" data-view="orders">Pedidos</a>
+      <a href="#" data-view="quotes">Cotação</a>
+      <a href="#" data-view="shipments">Embarques/Tracking</a>
     </nav>
   </aside>
-
   <main>
     <header class="toolbar">
-      <input placeholder="Buscar pedido, SKU, rastreio..." />
-      <button>Importar Tiny</button>
-      <button class="primary">Nova cotação</button>
+      <input id="apiKey" placeholder="x-api-key" />
+      <button id="reloadBtn" class="primary">Atualizar</button>
     </header>
-
-    <section class="kpis">
-      <article><span>Pedidos</span><strong>1.267</strong></article>
-      <article><span>Aguardando envio</span><strong>142</strong></article>
-      <article><span>Em trânsito</span><strong>298</strong></article>
-      <article><span>Entregues</span><strong>801</strong></article>
-      <article><span>Ocorrências</span><strong>26</strong></article>
-      <article><span>Atrasados</span><strong>18</strong></article>
-    </section>
-
-    <section class="grid">
-      <article class="panel">
-        <h2>Pedidos por transportadora</h2>
-        <table>
-          <thead><tr><th>Transportadora</th><th>Pedidos</th><th>SLA Médio</th><th>Custo Médio</th></tr></thead>
-          <tbody>
-            <tr><td>Transportadora Sul</td><td>412</td><td>5,2 dias</td><td>R$ 289,40</td></tr>
-            <tr><td>RodoBrasil</td><td>388</td><td>6,1 dias</td><td>R$ 304,10</td></tr>
-            <tr><td>Nacional Cargo</td><td>267</td><td>6,8 dias</td><td>R$ 330,90</td></tr>
-          </tbody>
-        </table>
-      </article>
-
-      <article class="panel">
-        <h2>Cotação rápida</h2>
-        <form class="quote">
-          <label>CEP destino <input value="90010-000" /></label>
-          <label>Peso (kg) <input value="42" /></label>
-          <label>Dimensões (cm) <input value="200x90x70" /></label>
-          <label>Valor NF <input value="3500" /></label>
-          <button type="button" class="primary">Simular cotação</button>
-        </form>
-      </article>
-    </section>
+    <section id="app"></section>
   </main>
+  <script src="app.js" type="module"></script>
 </body>
 </html>

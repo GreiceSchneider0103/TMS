@@ -1,22 +1,19 @@
-# Arquitetura Funcional — TMS Lessul V1
+# Arquitetura Funcional — TMS Lessul V1 (Operacional)
 
-## Camadas
-- **Supabase**: Postgres + Auth + Storage + RLS + RPCs.
-- **API (Render Web Service)**: endpoints operacionais de cadastros, pedidos, cotação, tracking e auditoria.
-- **Workers (Render Background Worker)**: importação de tabelas, tracking polling e sincronização Tiny.
-- **Frontend (Render Static Site)**: painel administrativo para operação.
+## Banco (Supabase/Postgres)
+- Migração base + incremental com entidades operacionais.
+- RLS por `account_id` em tabelas de negócio.
+- Índices e chaves de idempotência para quotes, tracking e webhooks.
 
-## Módulos da API
-1. Auth e perfis por tenant
-2. Cadastros (empresa, CD, transportadora, serviços, SKU logístico)
-3. Pedidos (import Tiny + validação)
-4. Motor de cotação e regras
-5. Embarques e tracking
-6. Integração Tiny (sync status)
-7. Dashboard e auditoria
+## API
+- Persistência real com `pg` em `DATABASE_URL`.
+- Fluxos: pedidos, cotação, embarques, tracking webhook, dashboard e importação de tabela.
+- Tiny adapter HTTP com autenticação por token.
 
-## Estratégia de escalabilidade
-- Jobs assíncronos para operações pesadas.
-- Idempotência por chaves de negócio (`account_id + external_id`).
-- Versionamento de tabela com publicação explícita.
-- Camada de adaptadores para novas transportadoras/canais.
+## Workers
+- Sync Tiny com retentativa em `sync_jobs`.
+- Tracking polling persistente e idempotente.
+- Publicação de versão de tabela por worker.
+
+## Frontend
+- Painéis funcionais consumindo API real (dashboard/pedidos/cotação/embarques).

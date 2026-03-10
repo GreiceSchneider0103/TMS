@@ -1,20 +1,30 @@
 # Deploy — Supabase + Render
 
-## Serviços no Render
-1. `tms-api` (Web Service)
-2. `tms-workers` (Background Worker)
+## Serviços
+1. `tms-api` (Node Web Service)
+2. `tms-workers` (Node Background Worker)
 3. `tms-web` (Static Site)
 
-## Variáveis recomendadas
-- `SUPABASE_URL`
-- `SUPABASE_ANON_KEY`
-- `SUPABASE_SERVICE_ROLE_KEY`
+## Variáveis obrigatórias
+- `DATABASE_URL`
+- `TINY_BASE_URL`
 - `TINY_API_TOKEN`
-- `APP_ENV`
+- `PORT` (API)
+- `INTERNAL_CONTEXT_TOKEN` (somente para integração interna controlada)
 
-## Passos
-1. Criar projeto Supabase e executar `supabase/migrations/001_init.sql`.
-2. Executar seed `supabase/seeds/001_seed.sql`.
-3. Publicar API e workers no Render apontando para os diretórios `apps/api` e `workers`.
-4. Publicar `apps/web` como site estático.
-5. Configurar cron para tracking polling e retentativas de sincronização.
+## Ordem de bootstrap
+1. Aplicar `supabase/migrations/001_init.sql`.
+2. Aplicar `supabase/migrations/002_operational_gap_closure.sql`.
+3. Aplicar `supabase/migrations/003_hardening_security_idempotency.sql`.
+4. Aplicar seed opcional `supabase/seeds/001_seed.sql`.
+5. Criar `app.api_credentials` com hash SHA256 do token de integração.
+6. Deploy API/Workers com mesmas env vars de banco e Tiny.
+7. Deploy frontend apontando para URL da API.
+
+## Smoke test de homolog
+- API: `GET /health`
+- Pedidos: `POST /orders/import/tiny`
+- Cotação: `POST /quotes/manual`
+- Embarque: `POST /shipments`
+- Tracking: `POST /tracking/webhook/:provider`
+- Dashboard: `GET /dashboard/summary`

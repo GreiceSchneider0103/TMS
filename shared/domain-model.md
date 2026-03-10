@@ -1,12 +1,16 @@
-# Entidades de domínio (resumo)
+# Entidades de domínio
 
-- Account, Profile, Company, DistributionCenter
+- Account, Profile, Membership
+- Company, DistributionCenter
 - Carrier, CarrierService
 - Product, ProductLogistics
 - Recipient
 - Order, OrderItem
-- FreightTable, FreightTableVersion, FreightRoute
+- FreightTable, FreightTableVersion, FreightRoute, FreightRecipientFee
 - ShippingRule
 - QuoteRequest, QuoteResult
-- Shipment, TrackingEvent
-- SyncJob, AuditLog
+- Shipment, ShipmentPackage, TrackingEvent
+- File
+- WebhookLog
+- SyncJob
+- AuditLog

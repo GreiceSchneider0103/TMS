@@ -1,24 +1,46 @@
-# TMS Lessul — Operação Logística Omnichannel
+# TMS Lessul — V1 Operacional (Homologação Técnica)
 
-Projeto inicial da V1 do TMS próprio com foco em:
-- Integração Tiny
-- Importação/versionamento de tabelas de frete
-- Motor de cotação e regras
-- Embarques + tracking
-- Dashboard operacional
+## Componentes
+- `supabase/migrations`: schema e migrações incrementais
+- `apps/api`: API Node com persistência Postgres/Supabase
+- `workers`: jobs de sync Tiny, tracking e publicação de tabela
+- `apps/web`: frontend funcional consumindo API
 
-## Estrutura
-- `supabase/migrations`: schema SQL, RLS, funções e índices.
-- `supabase/seeds`: dados iniciais para desenvolvimento.
-- `apps/api`: API HTTP modular para cadastros, pedidos, cotação, tracking e integrações.
-- `apps/web`: frontend admin responsivo com páginas mínimas da V1.
-- `workers`: jobs assíncronos para importação, tracking polling e sync Tiny.
-- `docs`: arquitetura, fluxos e guia de deploy (Render + Supabase).
+## Variáveis de ambiente (API e workers)
+- `DATABASE_URL`
+- `TINY_BASE_URL`
+- `TINY_API_TOKEN`
+- `PORT` (API)
+- `INTERNAL_CONTEXT_TOKEN` (apenas fallback interno controlado)
 
-## Como usar (MVP de referência)
-1. Aplicar SQL em `supabase/migrations/001_init.sql` no projeto Supabase.
-2. Popular dados base com `supabase/seeds/001_seed.sql`.
-3. Publicar API e workers no Render como serviços separados.
-4. Publicar frontend no Render Static Site.
+## Segurança de contexto multi-tenant
+A API resolve o contexto por `x-api-key` (ou `Authorization: Bearer <token>`), validando hash em `app.api_credentials`.
+`x-account-id` sozinho não é aceito para chamadas externas.
 
-> Este repositório entrega uma base técnica sólida para evolução incremental da V1.
+## Runbook de homologação
+1. Aplicar migrations em ordem:
+   - `supabase/migrations/001_init.sql`
+   - `supabase/migrations/002_operational_gap_closure.sql`
+   - `supabase/migrations/003_hardening_security_idempotency.sql`
+2. Aplicar seed opcional: `supabase/seeds/001_seed.sql`.
+3. Criar credencial de API:
+   - gerar token bruto (ex.: UUID)
+   - gravar SHA256 em `app.api_credentials.token_hash` com `account_id` e `is_active=true`
+4. Iniciar API: `cd apps/api && npm run dev`
+5. Iniciar workers conforme necessidade.
+6. Smoke test manual:
+   - `GET /health`
+   - `POST /orders/import/tiny`
+   - `POST /quotes/manual`
+   - `POST /shipments`
+   - `POST /tracking/webhook/:provider`
+   - `GET /dashboard/summary`
+
+## Fluxos implementados
+- Importação persistida de pedidos (Tiny adapter + upsert idempotente)
+- Cotação manual e automática persistidas (`quote_requests`, `quote_results`)
+- Criação de embarques e volumes (`shipments`, `shipment_packages`)
+- Tracking via webhook com deduplicação por evento externo
+- Parser XLSX real de tabela de frete com draft, publish e rollback
+- Dashboard com agregações reais do banco
+- Logs em `sync_jobs`, `webhook_logs`, `audit_logs`

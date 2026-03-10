@@ -5,6 +5,10 @@
   "type": "module",
   "scripts": {
     "dev": "node src/server.js",
-    "check": "node --check src/server.js && node --check src/services/freightEngine.js && node --check src/services/rulesEngine.js"
+    "check": "node --check src/server.js && node --check src/db.js && node --check src/utils/router.js && node --check src/utils/context.js && node --check src/services/audit.js && node --check src/services/freightEngine.js && node --check src/services/rulesEngine.js && node --check src/services/tinyClient.js && node --check src/services/freightTableImporter.js && node --check src/routes/orders.js && node --check src/routes/quotes.js && node --check src/routes/shipments.js && node --check src/routes/tracking.js && node --check src/routes/freightTables.js && node --check src/routes/dashboard.js"
+  },
+  "dependencies": {
+    "pg": "^8.13.1",
+    "xlsx": "^0.18.5"
   }
 }
