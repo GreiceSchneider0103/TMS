@@ -1,10 +1,14 @@
 const app = document.getElementById('app');
 const reloadBtn = document.getElementById('reloadBtn');
-const accountInput = document.getElementById('accountId');
+const apiKeyInput = document.getElementById('apiKey');
 let view = 'dashboard';
 
 function headers() {
-  return { 'content-type': 'application/json', 'x-account-id': accountInput.value };
+  return {
+    'content-type': 'application/json',
+    'x-api-key': apiKeyInput.value,
+    'x-correlation-id': crypto.randomUUID()
+  };
 }
 
 async function api(path, options = {}) {
@@ -32,23 +36,9 @@ async function render() {
   }
 
   if (view === 'quotes') {
-    app.innerHTML = `<article class="panel"><h2>Cotação manual</h2>
-      <button id="quoteBtn" class="primary">Executar cotação teste</button>
-      <pre id="quoteOut"></pre>
-    </article>`;
+    app.innerHTML = `<article class="panel"><h2>Cotação manual</h2><button id="quoteBtn" class="primary">Executar cotação teste</button><pre id="quoteOut"></pre></article>`;
     document.getElementById('quoteBtn').onclick = async () => {
-      const payload = {
-        destinationPostalCode: '90010000',
-        state: 'RS',
-        city: 'Porto Alegre',
-        invoiceAmount: 3200,
-        weightKg: 40,
-        lengthCm: 200,
-        widthCm: 90,
-        heightCm: 70,
-        channel: 'tiny',
-        recipientType: 'PF'
-      };
+      const payload = { destinationPostalCode: '90010000', state: 'RS', city: 'Porto Alegre', invoiceAmount: 3200, weightKg: 40, lengthCm: 200, widthCm: 90, heightCm: 70, channel: 'tiny', recipientType: 'PF' };
       const result = await api('/quotes/manual', { method: 'POST', body: JSON.stringify(payload) });
       document.getElementById('quoteOut').textContent = JSON.stringify(result, null, 2);
     };

@@ -1,9 +1,9 @@
 import { query } from '../db.js';
-import { getAccountId } from '../utils/context.js';
+import { resolveContext } from '../utils/context.js';
 
 export function registerDashboardRoutes(app) {
   app.get('/dashboard/summary', async ({ req, query: qs }) => {
-    const accountId = getAccountId(req);
+    const ctx = await resolveContext(req);
     const from = qs.from || '1970-01-01';
     const to = qs.to || '2999-12-31';
 
@@ -15,7 +15,7 @@ export function registerDashboardRoutes(app) {
         sum(coalesce(shipping_amount,0)) as freight_revenue
        from app.orders
        where account_id = $1 and created_at::date between $2 and $3`,
-      [accountId, from, to]
+      [ctx.accountId, from, to]
     );
 
     const shipmentStats = await query(
@@ -27,7 +27,7 @@ export function registerDashboardRoutes(app) {
         count(*) filter (where status = 'RETURNED') as returned
       from app.shipments
       where account_id = $1 and created_at::date between $2 and $3`,
-      [accountId, from, to]
+      [ctx.accountId, from, to]
     );
 
     const carriers = await query(
@@ -41,13 +41,9 @@ export function registerDashboardRoutes(app) {
        where s.account_id = $1 and s.created_at::date between $2 and $3
        group by c.name
        order by shipments desc`,
-      [accountId, from, to]
+      [ctx.accountId, from, to]
     );
 
-    return {
-      ...totals.rows[0],
-      ...shipmentStats.rows[0],
-      byCarrier: carriers.rows
-    };
+    return { ...totals.rows[0], ...shipmentStats.rows[0], byCarrier: carriers.rows, correlationId: ctx.correlationId };
   });
 }

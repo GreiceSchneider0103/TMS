@@ -2,26 +2,23 @@ import crypto from 'node:crypto';
 import { query, transaction } from '../db.js';
 import { calculateRouteQuote, computeWeights } from '../services/freightEngine.js';
 import { applyShippingRules } from '../services/rulesEngine.js';
-import { getAccountId, getUserId } from '../utils/context.js';
+import { resolveContext } from '../utils/context.js';
 import { logAudit } from '../services/audit.js';
 
 export function registerQuoteRoutes(app) {
   app.post('/quotes/manual', async ({ req, body }) => {
-    const accountId = getAccountId(req);
-    const userId = getUserId(req);
+    const ctx = await resolveContext(req);
     const requestHash = hashRequest(body);
-
-    const quote = await createAndCalculateQuote({ accountId, body, requestHash });
-    await logAudit({ accountId, userId, entity: 'quote_request', entityId: quote.request.id, action: 'manual_quote', afterData: { resultCount: quote.results.length } });
-    return quote;
+    const quote = await createAndCalculateQuote({ accountId: ctx.accountId, body, requestHash, correlationId: ctx.correlationId });
+    await logAudit({ accountId: ctx.accountId, userId: ctx.userId, entity: 'quote_request', entityId: quote.request.id, action: 'manual_quote', afterData: { resultCount: quote.results.length }, correlationId: ctx.correlationId });
+    return { ...quote, correlationId: ctx.correlationId };
   });
 
   app.post('/quotes/automatic/:orderId', async ({ req, params }) => {
-    const accountId = getAccountId(req);
-    const { rows } = await query('select * from app.orders where account_id = $1 and id = $2', [accountId, params.orderId]);
+    const ctx = await resolveContext(req);
+    const { rows } = await query('select * from app.orders where account_id = $1 and id = $2', [ctx.accountId, params.orderId]);
     if (!rows[0]) throw new Error('Order not found');
     const order = rows[0];
-
     const body = {
       orderId: order.id,
       destinationPostalCode: order.raw_payload?.postal_code || '00000000',
@@ -38,26 +35,28 @@ export function registerQuoteRoutes(app) {
       categories: order.raw_payload?.categories || []
     };
 
-    return createAndCalculateQuote({ accountId, body, requestHash: hashRequest(body) });
+    const result = await createAndCalculateQuote({ accountId: ctx.accountId, body, requestHash: hashRequest(body), correlationId: ctx.correlationId });
+    await logAudit({ accountId: ctx.accountId, userId: ctx.userId, entity: 'quote_request', entityId: result.request.id, action: 'automatic_quote', afterData: { orderId: order.id, resultCount: result.results.length }, correlationId: ctx.correlationId });
+    return { ...result, correlationId: ctx.correlationId };
   });
 
   app.patch('/quotes/results/:id/select', async ({ req, params }) => {
-    const accountId = getAccountId(req);
+    const ctx = await resolveContext(req);
     await transaction(async (client) => {
-      const selected = await client.query('select request_id from app.quote_results where account_id = $1 and id = $2', [accountId, params.id]);
+      const selected = await client.query('select request_id from app.quote_results where account_id = $1 and id = $2', [ctx.accountId, params.id]);
       if (!selected.rows[0]) throw new Error('Quote result not found');
       const requestId = selected.rows[0].request_id;
-      await client.query('update app.quote_results set selected = false where account_id = $1 and request_id = $2', [accountId, requestId]);
-      await client.query('update app.quote_results set selected = true where account_id = $1 and id = $2', [accountId, params.id]);
+      await client.query('update app.quote_results set selected = false where account_id = $1 and request_id = $2', [ctx.accountId, requestId]);
+      await client.query('update app.quote_results set selected = true where account_id = $1 and id = $2', [ctx.accountId, params.id]);
+      await client.query("update app.orders set status = 'QUOTED', updated_at = now() where account_id = $1 and id in (select order_id from app.quote_requests where id = $2)", [ctx.accountId, requestId]);
     });
-    return { selected: true };
+    return { selected: true, correlationId: ctx.correlationId };
   });
 }
 
 async function createAndCalculateQuote({ accountId, body, requestHash }) {
   const existing = await query('select * from app.quote_requests where account_id = $1 and request_hash = $2', [accountId, requestHash]);
   let request = existing.rows[0];
-
   if (!request) {
     const inserted = await query(
       `insert into app.quote_requests(account_id, order_id, destination_postal_code, invoice_amount, payload, request_hash)
@@ -82,10 +81,7 @@ async function createAndCalculateQuote({ accountId, body, requestHash }) {
     [accountId, body.recipientDocument || null]
   );
 
-  const baseOptions = routes.rows
-    .map((route) => calculateRouteQuote({ route, request: body, recipientFees: recipientFees.rows }))
-    .filter(Boolean);
-
+  const baseOptions = routes.rows.map((route) => calculateRouteQuote({ route, request: body, recipientFees: recipientFees.rows })).filter(Boolean);
   const weights = computeWeights(body);
   const rules = await query('select * from app.shipping_rules where account_id = $1', [accountId]);
   const ranked = applyShippingRules(baseOptions, rules.rows, { ...body, billableWeight: weights.billableWeight });
@@ -100,7 +96,6 @@ async function createAndCalculateQuote({ accountId, body, requestHash }) {
     );
     persisted.push(ins.rows[0]);
   }
-
   return { request, results: persisted };
 }
 
