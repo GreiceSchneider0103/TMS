@@ -1,0 +1,23 @@
+:root { color-scheme: light; font-family: Inter, system-ui, sans-serif; }
+* { box-sizing: border-box; }
+body { margin: 0; display: grid; grid-template-columns: 240px 1fr; min-height: 100vh; background: #f5f7fb; color: #1a2333; }
+.sidebar { background: #0c1b38; color: #fff; padding: 20px; }
+.sidebar h1 { font-size: 1.1rem; margin-top: 0; }
+.sidebar nav { display: grid; gap: 8px; }
+.sidebar a { color: #d2defa; text-decoration: none; padding: 8px; border-radius: 8px; }
+.sidebar a:hover { background: #17305e; }
+main { padding: 20px; }
+.toolbar { display: flex; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; }
+input { border: 1px solid #ccd6eb; border-radius: 10px; padding: 10px 12px; background: #fff; }
+.toolbar input { min-width: 260px; flex: 1; }
+button { border: 1px solid #ccd6eb; background: #fff; padding: 10px 14px; border-radius: 10px; cursor: pointer; }
+button.primary { background: #2457ff; color: #fff; border-color: #2457ff; }
+.kpis { display: grid; grid-template-columns: repeat(6, minmax(110px, 1fr)); gap: 10px; margin-bottom: 16px; }
+.kpis article, .panel { background: #fff; border: 1px solid #dde5f5; border-radius: 12px; padding: 14px; }
+.kpis span { display: block; font-size: .82rem; color: #54627e; }
+.kpis strong { font-size: 1.4rem; }
+pre { white-space: pre-wrap; max-height: 60vh; overflow: auto; }
+@media (max-width: 980px) {
+  body { grid-template-columns: 1fr; }
+  .kpis { grid-template-columns: repeat(2, 1fr); }
+}
