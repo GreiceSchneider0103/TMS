@@ -23,21 +23,43 @@ export function registerShipmentRoutes(app) {
     const ctx = await resolveContext(req);
     const idempotencyKey = String(body.idempotencyKey || crypto.createHash('sha256').update(`${body.orderId}-${body.quoteResultId}-${body.trackingCode || ''}`).digest('hex'));
 
-    const existing = await query('select * from app.shipments where account_id = $1 and idempotency_key = $2 limit 1', [ctx.accountId, idempotencyKey]);
-    if (existing.rows[0]) return { ...existing.rows[0], reused: true, correlationId: ctx.correlationId };
+    const existingByIdempotency = await query('select * from app.shipments where account_id = $1 and idempotency_key = $2 limit 1', [ctx.accountId, idempotencyKey]);
+    if (existingByIdempotency.rows[0]) return { ...existingByIdempotency.rows[0], reused: true, correlationId: ctx.correlationId };
+
+    const existingByOrderQuote = await query(
+      `select * from app.shipments
+       where account_id = $1 and order_id = $2 and quote_result_id = $3
+       limit 1`,
+      [ctx.accountId, body.orderId, body.quoteResultId]
+    );
+    if (existingByOrderQuote.rows[0]) return { ...existingByOrderQuote.rows[0], reused: true, correlationId: ctx.correlationId };
 
     const result = await transaction(async (client) => {
       const quoteRes = await client.query('select * from app.quote_results where account_id = $1 and id = $2', [ctx.accountId, body.quoteResultId]);
       if (!quoteRes.rows[0]) throw new Error('Quote result not found');
       const q = quoteRes.rows[0];
-      const ins = await client.query(
-        `insert into app.shipments(account_id, order_id, quote_result_id, carrier_id, carrier_service_id, tracking_code, invoice_number, cte_number, status, idempotency_key)
-         values($1,$2,$3,$4,$5,$6,$7,$8,'DISPATCHED',$9)
-         on conflict(account_id, idempotency_key) do update set updated_at = now()
-         returning *`,
-        [ctx.accountId, body.orderId, body.quoteResultId, q.carrier_id, body.carrierServiceId || null, body.trackingCode || null, body.invoiceNumber || null, body.cteNumber || null, idempotencyKey]
-      );
-      const shipment = ins.rows[0];
+      let shipment;
+      try {
+        const ins = await client.query(
+          `insert into app.shipments(account_id, order_id, quote_result_id, carrier_id, carrier_service_id, tracking_code, invoice_number, cte_number, status, idempotency_key)
+           values($1,$2,$3,$4,$5,$6,$7,$8,'DISPATCHED',$9)
+           returning *`,
+          [ctx.accountId, body.orderId, body.quoteResultId, q.carrier_id, body.carrierServiceId || null, body.trackingCode || null, body.invoiceNumber || null, body.cteNumber || null, idempotencyKey]
+        );
+        shipment = ins.rows[0];
+      } catch (error) {
+        if (error?.code !== '23505') throw error;
+        const raceSafe = await client.query(
+          `select * from app.shipments
+           where account_id = $1 and (idempotency_key = $2 or (order_id = $3 and quote_result_id = $4))
+           order by created_at desc
+           limit 1`,
+          [ctx.accountId, idempotencyKey, body.orderId, body.quoteResultId]
+        );
+        if (!raceSafe.rows[0]) throw error;
+        shipment = raceSafe.rows[0];
+      }
+
       const packages = body.packages || [{ package_number: 1, weight_kg: body.weightKg || 1 }];
       for (const p of packages) {
         await client.query(
