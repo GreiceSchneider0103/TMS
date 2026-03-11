@@ -21,10 +21,16 @@ export function registerShipmentRoutes(app) {
     const idempotencyKey = String(body.idempotencyKey || crypto.createHash('sha256').update(`${body.orderId}-${body.quoteResultId}-${body.trackingCode || ''}`).digest('hex'));
 
     const existingByIdempotency = await query('select * from app.shipments where account_id = $1 and idempotency_key = $2 limit 1', [ctx.accountId, idempotencyKey]);
-    if (existingByIdempotency.rows[0]) return { ...existingByIdempotency.rows[0], reused: true, correlationId: ctx.correlationId };
+    if (existingByIdempotency.rows[0]) {
+      await updateOrderStatusFromShipment({ accountId: ctx.accountId, orderId: body.orderId });
+      return { ...existingByIdempotency.rows[0], reused: true, correlationId: ctx.correlationId };
+    }
 
     const existingByOrderQuote = await query(`select * from app.shipments where account_id = $1 and order_id = $2 and quote_result_id = $3 limit 1`, [ctx.accountId, body.orderId, body.quoteResultId]);
-    if (existingByOrderQuote.rows[0]) return { ...existingByOrderQuote.rows[0], reused: true, correlationId: ctx.correlationId };
+    if (existingByOrderQuote.rows[0]) {
+      await updateOrderStatusFromShipment({ accountId: ctx.accountId, orderId: body.orderId });
+      return { ...existingByOrderQuote.rows[0], reused: true, correlationId: ctx.correlationId };
+    }
 
     const result = await transaction(async (client) => {
       const quoteRes = await client.query('select * from app.quote_results where account_id = $1 and id = $2', [ctx.accountId, body.quoteResultId]);
@@ -77,3 +83,17 @@ export function registerShipmentRoutes(app) {
     return { ...result, correlationId: ctx.correlationId };
   }));
 }
+
+async function updateOrderStatusFromShipment({ accountId, orderId }) {
+  if (!orderId) return;
+
+  await query(
+    "update app.orders set status = case when status = 'READY_FOR_QUOTE' then 'QUOTED' else status end, updated_at = now() where account_id = $1 and id = $2",
+    [accountId, orderId]
+  );
+  await query(
+    "update app.orders set status = 'DISPATCHED', updated_at = now() where account_id = $1 and id = $2",
+    [accountId, orderId]
+  );
+}
+
