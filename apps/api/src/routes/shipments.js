@@ -30,6 +30,10 @@ export function registerShipmentRoutes(app) {
       const quoteRes = await client.query('select * from app.quote_results where account_id = $1 and id = $2', [ctx.accountId, body.quoteResultId]);
       if (!quoteRes.rows[0]) throw new Error('Quote result not found');
       const q = quoteRes.rows[0];
+
+      const orderQ = await client.query('select * from app.orders where account_id = $1 and id = $2', [ctx.accountId, body.orderId]);
+      if (!orderQ.rows[0]) throw new Error('Order not found');
+
       let shipment;
       try {
         const ins = await client.query(
@@ -56,6 +60,16 @@ export function registerShipmentRoutes(app) {
           [ctx.accountId, shipment.id, p.package_number, p.weight_kg, p.length_cm || null, p.width_cm || null, p.height_cm || null, p.tracking_code || null, p.metadata || {}]
         );
       }
+
+      await client.query(
+        "update app.orders set status = case when status = 'READY_FOR_QUOTE' then 'QUOTED' else status end, updated_at = now() where account_id = $1 and id = $2",
+        [ctx.accountId, body.orderId]
+      );
+      await client.query(
+        "update app.orders set status = 'DISPATCHED', updated_at = now() where account_id = $1 and id = $2",
+        [ctx.accountId, body.orderId]
+      );
+
       return shipment;
     });
 
