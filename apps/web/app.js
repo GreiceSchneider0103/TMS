@@ -253,11 +253,13 @@ function bindCrudForm(formId, pathOrBuilder, method) {
   if (!form) return;
   form.onsubmit = async (e) => {
     e.preventDefault();
+    if (method === 'DELETE' && !window.confirm('Confirma exclusão lógica?')) return;
     const raw = Object.fromEntries(new FormData(e.target).entries());
     const [path, body] = typeof pathOrBuilder === 'function' ? pathOrBuilder(raw) : [pathOrBuilder, raw];
     try {
       await api(path, { method, body: method === 'DELETE' ? JSON.stringify({}) : JSON.stringify(body) });
       document.getElementById('cadastroMsg').innerHTML = notice(`Operação ${method} concluída`);
+      await render();
     } catch (err) {
       document.getElementById('cadastroMsg').innerHTML = notice(err.message, 'err');
     }
