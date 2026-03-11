@@ -7,6 +7,14 @@ import { registerShipmentRoutes } from './routes/shipments.js';
 import { registerTrackingRoutes } from './routes/tracking.js';
 import { registerFreightTableRoutes } from './routes/freightTables.js';
 import { runWithDbContext } from './db.js';
+import { registerCompaniesRoutes } from './routes/companies.js';
+import { registerDistributionCenterRoutes } from './routes/distributionCenters.js';
+import { registerCarrierRoutes } from './routes/carriers.js';
+import { registerCarrierServiceRoutes } from './routes/carrierServices.js';
+import { registerProductRoutes } from './routes/products.js';
+import { registerProductLogisticsRoutes } from './routes/productLogistics.js';
+import { registerRecipientRoutes } from './routes/recipients.js';
+import { registerLogRoutes } from './routes/logs.js';
 
 const app = router();
 registerOrderRoutes(app);
@@ -15,6 +23,14 @@ registerShipmentRoutes(app);
 registerTrackingRoutes(app);
 registerFreightTableRoutes(app);
 registerDashboardRoutes(app);
+registerCompaniesRoutes(app);
+registerDistributionCenterRoutes(app);
+registerCarrierRoutes(app);
+registerCarrierServiceRoutes(app);
+registerProductRoutes(app);
+registerProductLogisticsRoutes(app);
+registerRecipientRoutes(app);
+registerLogRoutes(app);
 
 app.get('/health', async () => ({ ok: true }));
 

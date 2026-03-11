@@ -1,5 +1,16 @@
 import crypto from 'node:crypto';
 import { query, setDbContext } from '../db.js';
+import { HttpError } from './router.js';
+
+const ROLE_ALIASES = {
+  admin: 'admin',
+  operador: 'operador_logistico',
+  operador_logistico: 'operador_logistico',
+  financeiro: 'financeiro',
+  analista_integracao: 'analista_integracao',
+  integracao: 'analista_integracao',
+  visualizador: 'visualizador'
+};
 
 export async function resolveContext(req) {
   if (req.tmsContext) {
@@ -13,14 +24,14 @@ export async function resolveContext(req) {
   const apiKey = parseApiKey(req);
   if (apiKey) {
     const authResult = await query('select * from app.authenticate_api_key($1)', [apiKey]);
-    if (!authResult.rows[0]) throw new Error('Invalid API key');
+    if (!authResult.rows[0]) throw new HttpError(401, 'Invalid API key');
 
     await query('select app.touch_api_credential($1)', [authResult.rows[0].credential_id]);
 
     const ctx = {
       accountId: authResult.rows[0].account_id,
       userId,
-      role: authResult.rows[0].role,
+      role: normalizeRole(authResult.rows[0].role),
       correlationId,
       authMode: 'api_key'
     };
@@ -31,7 +42,7 @@ export async function resolveContext(req) {
 
   if (process.env.INTERNAL_CONTEXT_TOKEN && req.headers['x-internal-token'] === process.env.INTERNAL_CONTEXT_TOKEN) {
     const accountId = req.headers['x-account-id'];
-    if (!accountId) throw new Error('Missing x-account-id for internal context');
+    if (!accountId) throw new HttpError(401, 'Missing x-account-id for internal context');
 
     const ctx = {
       accountId: String(accountId),
@@ -45,7 +56,24 @@ export async function resolveContext(req) {
     return ctx;
   }
 
-  throw new Error('Unauthorized context. Use x-api-key or Authorization Bearer token');
+  throw new HttpError(401, 'Unauthorized context. Use x-api-key or Authorization Bearer token');
+}
+
+export function requireAnyRole(allowedRoles, handler) {
+  const allowed = new Set(allowedRoles.map(normalizeRole));
+  return async (ctxInput) => {
+    const ctx = await resolveContext(ctxInput.req);
+    if (ctx.role !== 'admin' && !allowed.has(ctx.role)) {
+      throw new HttpError(403, `Forbidden for role ${ctx.role}`);
+    }
+    return handler({ ...ctxInput, ctx });
+  };
+}
+
+export const requireRole = requireAnyRole;
+
+function normalizeRole(role) {
+  return ROLE_ALIASES[String(role || '').toLowerCase()] || 'visualizador';
 }
 
 function parseApiKey(req) {

@@ -1,11 +1,10 @@
 import { query, transaction } from '../db.js';
 import { parseFreightXlsx } from '../services/freightTableImporter.js';
-import { resolveContext } from '../utils/context.js';
+import { requireAnyRole } from '../utils/context.js';
 import { logAudit } from '../services/audit.js';
 
 export function registerFreightTableRoutes(app) {
-  app.post('/freight-tables/import', async ({ req, body }) => {
-    const ctx = await resolveContext(req);
+  app.post('/freight-tables/import', requireAnyRole(['admin', 'operador_logistico'], async ({ ctx, body }) => {
     const parsed = parseFreightXlsx(body.fileBase64);
     if (!parsed.ok) return { ok: false, errors: parsed.errors, preview: parsed.preview, correlationId: ctx.correlationId };
 
@@ -15,11 +14,7 @@ export function registerFreightTableRoutes(app) {
          values($1,'freight-tables',$2,$3,$4,$5,$6) returning *`,
         [ctx.accountId, `uploads/${Date.now()}-${body.fileName}`, body.fileName || 'table.xlsx', body.mimeType || 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', body.byteSize || 0, { source: 'api' }]
       );
-      const table = await client.query(
-        `insert into app.freight_tables(account_id, name, carrier_id)
-         values($1,$2,$3) returning *`,
-        [ctx.accountId, body.tableName, body.carrierId || null]
-      );
+      const table = await client.query(`insert into app.freight_tables(account_id, name, carrier_id) values($1,$2,$3) returning *`, [ctx.accountId, body.tableName, body.carrierId || null]);
       const version = await client.query(
         `insert into app.freight_table_versions(table_id, account_id, version_label, status, raw_file_path, created_by)
          values($1,$2,$3,'DRAFT',$4,$5) returning *`,
@@ -33,30 +28,24 @@ export function registerFreightTableRoutes(app) {
         );
       }
       for (const f of parsed.normalized.recipientFees) {
-        await client.query(
-          `insert into app.freight_recipient_fees(account_id, version_id, recipient_document, fee_type, amount)
-           values($1,$2,$3,$4,$5)`,
-          [ctx.accountId, version.rows[0].id, f.recipient_document, f.fee_type, f.amount]
-        );
+        await client.query(`insert into app.freight_recipient_fees(account_id, version_id, recipient_document, fee_type, amount) values($1,$2,$3,$4,$5)`, [ctx.accountId, version.rows[0].id, f.recipient_document, f.fee_type, f.amount]);
       }
       return { table: table.rows[0], version: version.rows[0], file: file.rows[0] };
     });
 
     await logAudit({ accountId: ctx.accountId, userId: ctx.userId, entity: 'freight_table_version', entityId: result.version.id, action: 'import_draft', afterData: parsed.preview.counts, correlationId: ctx.correlationId });
     return { ok: true, preview: parsed.preview, ...result, correlationId: ctx.correlationId };
-  });
+  }));
 
-  app.post('/freight-tables/versions/:id/publish', async ({ req, params }) => {
-    const ctx = await resolveContext(req);
+  app.post('/freight-tables/versions/:id/publish', requireAnyRole(['admin', 'operador_logistico'], async ({ ctx, params }) => {
     await query('select app.publish_freight_table_version($1)', [params.id]);
     await logAudit({ accountId: ctx.accountId, userId: ctx.userId, entity: 'freight_table_version', entityId: params.id, action: 'publish', correlationId: ctx.correlationId });
     return { published: true, versionId: params.id, correlationId: ctx.correlationId };
-  });
+  }));
 
-  app.post('/freight-tables/versions/:id/rollback', async ({ req, params }) => {
-    const ctx = await resolveContext(req);
+  app.post('/freight-tables/versions/:id/rollback', requireAnyRole(['admin'], async ({ ctx, params }) => {
     await query('select app.rollback_freight_table_version($1)', [params.id]);
     await logAudit({ accountId: ctx.accountId, userId: ctx.userId, entity: 'freight_table_version', entityId: params.id, action: 'rollback', correlationId: ctx.correlationId });
     return { rolledBack: true, versionId: params.id, correlationId: ctx.correlationId };
-  });
+  }));
 }

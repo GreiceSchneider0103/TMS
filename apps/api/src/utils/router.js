@@ -1,3 +1,10 @@
+export class HttpError extends Error {
+  constructor(status, message) {
+    super(message);
+    this.status = status;
+  }
+}
+
 export function router() {
   const routes = [];
   const add = (method, path, handler) => routes.push({ method, ...compile(path), handler });
@@ -6,6 +13,7 @@ export function router() {
     get: (path, handler) => add('GET', path, handler),
     post: (path, handler) => add('POST', path, handler),
     patch: (path, handler) => add('PATCH', path, handler),
+    delete: (path, handler) => add('DELETE', path, handler),
     async handle(req, res) {
       const url = new URL(req.url, 'http://localhost');
       const route = routes.find((r) => r.method === req.method && r.regex.test(url.pathname));
@@ -21,7 +29,8 @@ export function router() {
           res.end(JSON.stringify(data));
         }
       } catch (error) {
-        res.writeHead(400, { 'content-type': 'application/json' });
+        const status = Number(error?.status || 400);
+        res.writeHead(status, { 'content-type': 'application/json' });
         res.end(JSON.stringify({ error: error.message }));
       }
       return true;

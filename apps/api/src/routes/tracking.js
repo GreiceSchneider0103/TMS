@@ -1,11 +1,10 @@
 import { query, transaction } from '../db.js';
-import { resolveContext } from '../utils/context.js';
+import { requireAnyRole } from '../utils/context.js';
 import { normalizeTrackingStatus } from '../../../../workers/src/trackingPolling.js';
 import { logAudit } from '../services/audit.js';
 
 export function registerTrackingRoutes(app) {
-  app.post('/tracking/webhook/:provider', async ({ req, params, body }) => {
-    const ctx = await resolveContext(req);
+  app.post('/tracking/webhook/:provider', requireAnyRole(['operador_logistico', 'analista_integracao'], async ({ ctx, params, body }) => {
     const eventKey = String(body.eventId || body.id || `${body.shipmentId}-${body.status}-${body.occurredAt}`);
 
     const log = await query(
@@ -30,7 +29,7 @@ export function registerTrackingRoutes(app) {
       );
 
       if (evt.rows[0]) {
-        await client.query('update app.shipments set status = $1, updated_at = now(), delivered_at = case when $1 = \'DELIVERED\' then now() else delivered_at end where account_id = $2 and id = $3', [macro, ctx.accountId, body.shipmentId]);
+        await client.query("update app.shipments set status = $1, updated_at = now(), delivered_at = case when $1 = 'DELIVERED' then now() else delivered_at end where account_id = $2 and id = $3", [macro, ctx.accountId, body.shipmentId]);
         await client.query(
           `insert into app.sync_jobs(account_id, kind, status, payload, attempts, external_ref, idempotency_key, correlation_id)
            values($1,'tiny_status_sync','pending',$2,0,$3,$4,$5)
@@ -45,11 +44,10 @@ export function registerTrackingRoutes(app) {
 
     await logAudit({ accountId: ctx.accountId, userId: ctx.userId, entity: 'tracking_event', entityId: saved?.id || eventKey, action: 'tracking_webhook', afterData: { provider: params.provider, shipmentId: body.shipmentId, status: body.status }, correlationId: ctx.correlationId });
     return { processed: true, deduped: !saved, event: saved, correlationId: ctx.correlationId };
-  });
+  }));
 
-  app.get('/tracking/shipment/:shipmentId', async ({ req, params }) => {
-    const ctx = await resolveContext(req);
+  app.get('/tracking/shipment/:shipmentId', requireAnyRole(['operador_logistico', 'financeiro', 'visualizador', 'analista_integracao'], async ({ ctx, params }) => {
     const { rows } = await query('select * from app.tracking_events where account_id = $1 and shipment_id = $2 order by occurred_at desc', [ctx.accountId, params.shipmentId]);
     return { items: rows, correlationId: ctx.correlationId };
-  });
+  }));
 }

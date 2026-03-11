@@ -39,3 +39,35 @@ export async function persistPolledTrackingEvent({ accountId, shipmentId, extern
     await pool.end();
   }
 }
+
+export async function runTrackingPollingCycle(fetchUpdates, limit = 100) {
+  const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
+  const client = await pool.connect();
+  try {
+    const shipments = await client.query(
+      `select * from app.shipments
+       where status in ('DISPATCHED','IN_TRANSIT','OUT_FOR_DELIVERY')
+       order by updated_at asc limit $1`,
+      [limit]
+    );
+    let processed = 0;
+    for (const s of shipments.rows) {
+      const events = await fetchUpdates(s);
+      for (const evt of events || []) {
+        const saved = await persistPolledTrackingEvent({
+          accountId: s.account_id,
+          shipmentId: s.id,
+          externalEventId: evt.id,
+          status: evt.status,
+          payload: evt,
+          occurredAt: evt.occurredAt
+        });
+        if (saved) processed += 1;
+      }
+    }
+    return { shipments: shipments.rows.length, processed };
+  } finally {
+    client.release();
+    await pool.end();
+  }
+}

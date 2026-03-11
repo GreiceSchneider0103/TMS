@@ -2,20 +2,18 @@ import crypto from 'node:crypto';
 import { query, transaction } from '../db.js';
 import { calculateRouteQuote, computeWeights } from '../services/freightEngine.js';
 import { applyShippingRules } from '../services/rulesEngine.js';
-import { resolveContext } from '../utils/context.js';
+import { requireAnyRole } from '../utils/context.js';
 import { logAudit } from '../services/audit.js';
 
 export function registerQuoteRoutes(app) {
-  app.post('/quotes/manual', async ({ req, body }) => {
-    const ctx = await resolveContext(req);
+  app.post('/quotes/manual', requireAnyRole(['operador_logistico'], async ({ ctx, body }) => {
     const requestHash = hashRequest(body);
-    const quote = await createAndCalculateQuote({ accountId: ctx.accountId, body, requestHash, correlationId: ctx.correlationId });
+    const quote = await createAndCalculateQuote({ accountId: ctx.accountId, body, requestHash });
     await logAudit({ accountId: ctx.accountId, userId: ctx.userId, entity: 'quote_request', entityId: quote.request.id, action: 'manual_quote', afterData: { resultCount: quote.results.length }, correlationId: ctx.correlationId });
     return { ...quote, correlationId: ctx.correlationId };
-  });
+  }));
 
-  app.post('/quotes/automatic/:orderId', async ({ req, params }) => {
-    const ctx = await resolveContext(req);
+  app.post('/quotes/automatic/:orderId', requireAnyRole(['operador_logistico'], async ({ ctx, params }) => {
     const { rows } = await query('select * from app.orders where account_id = $1 and id = $2', [ctx.accountId, params.orderId]);
     if (!rows[0]) throw new Error('Order not found');
     const order = rows[0];
@@ -35,13 +33,12 @@ export function registerQuoteRoutes(app) {
       categories: order.raw_payload?.categories || []
     };
 
-    const result = await createAndCalculateQuote({ accountId: ctx.accountId, body, requestHash: hashRequest(body), correlationId: ctx.correlationId });
+    const result = await createAndCalculateQuote({ accountId: ctx.accountId, body, requestHash: hashRequest(body) });
     await logAudit({ accountId: ctx.accountId, userId: ctx.userId, entity: 'quote_request', entityId: result.request.id, action: 'automatic_quote', afterData: { orderId: order.id, resultCount: result.results.length }, correlationId: ctx.correlationId });
     return { ...result, correlationId: ctx.correlationId };
-  });
+  }));
 
-  app.patch('/quotes/results/:id/select', async ({ req, params }) => {
-    const ctx = await resolveContext(req);
+  app.patch('/quotes/results/:id/select', requireAnyRole(['operador_logistico'], async ({ ctx, params }) => {
     await transaction(async (client) => {
       const selected = await client.query('select request_id from app.quote_results where account_id = $1 and id = $2', [ctx.accountId, params.id]);
       if (!selected.rows[0]) throw new Error('Quote result not found');
@@ -51,7 +48,7 @@ export function registerQuoteRoutes(app) {
       await client.query("update app.orders set status = 'QUOTED', updated_at = now() where account_id = $1 and id in (select order_id from app.quote_requests where id = $2)", [ctx.accountId, requestId]);
     });
     return { selected: true, correlationId: ctx.correlationId };
-  });
+  }));
 }
 
 async function createAndCalculateQuote({ accountId, body, requestHash }) {
@@ -92,16 +89,7 @@ async function createAndCalculateQuote({ accountId, body, requestHash }) {
     const ins = await query(
       `insert into app.quote_results(request_id, account_id, carrier_id, total_amount, total_days, ranking, breakdown, applied_rules)
        values($1,$2,$3,$4,$5,$6,$7,$8) returning *`,
-      [
-        request.id,
-        accountId,
-        option.carrierId,
-        option.totalAmount,
-        option.totalDays,
-        option.ranking,
-        toJson({ ...option.breakdown, justification: option.justification }),
-        toJson(option.appliedRules || [])
-      ]
+      [request.id, accountId, option.carrierId, option.totalAmount, option.totalDays, option.ranking, toJson({ ...option.breakdown, justification: option.justification }), toJson(option.appliedRules || [])]
     );
     persisted.push(ins.rows[0]);
   }
@@ -111,7 +99,6 @@ async function createAndCalculateQuote({ accountId, body, requestHash }) {
 function hashRequest(payload) {
   return crypto.createHash('sha256').update(JSON.stringify(payload)).digest('hex');
 }
-
 
 function toJson(value) {
   return JSON.stringify(value ?? {});

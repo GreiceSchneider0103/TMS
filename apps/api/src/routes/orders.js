@@ -1,14 +1,13 @@
 import crypto from 'node:crypto';
 import { query, transaction } from '../db.js';
 import { TinyClient } from '../services/tinyClient.js';
-import { resolveContext } from '../utils/context.js';
+import { requireAnyRole } from '../utils/context.js';
 import { logAudit, logSyncJob } from '../services/audit.js';
 
 const tiny = new TinyClient();
 
 export function registerOrderRoutes(app) {
-  app.get('/orders', async ({ req, query: qs }) => {
-    const ctx = await resolveContext(req);
+  app.get('/orders', requireAnyRole(['operador_logistico', 'financeiro', 'visualizador', 'analista_integracao'], async ({ ctx, query: qs }) => {
     const limit = Number(qs.limit || 50);
     const offset = Number(qs.offset || 0);
     const { rows } = await query(
@@ -16,18 +15,16 @@ export function registerOrderRoutes(app) {
       [ctx.accountId, limit, offset]
     );
     return { items: rows, total: rows.length, correlationId: ctx.correlationId };
-  });
+  }));
 
-  app.get('/orders/:id', async ({ req, params }) => {
-    const ctx = await resolveContext(req);
+  app.get('/orders/:id', requireAnyRole(['operador_logistico', 'financeiro', 'visualizador', 'analista_integracao'], async ({ ctx, params }) => {
     const { rows } = await query(`select * from app.orders where account_id = $1 and id = $2`, [ctx.accountId, params.id]);
     if (!rows[0]) throw new Error('Order not found');
     const items = await query(`select * from app.order_items where account_id = $1 and order_id = $2`, [ctx.accountId, params.id]);
     return { ...rows[0], items: items.rows, correlationId: ctx.correlationId };
-  });
+  }));
 
-  app.post('/orders/import/tiny', async ({ req, body }) => {
-    const ctx = await resolveContext(req);
+  app.post('/orders/import/tiny', requireAnyRole(['operador_logistico', 'analista_integracao'], async ({ ctx, body }) => {
     const idempotencyKey = String(body.idempotencyKey || `tiny-import-${body.page || 1}-${body.limit || 50}`);
 
     const existingJob = await query(
@@ -41,26 +38,9 @@ export function registerOrderRoutes(app) {
     let payload;
     try {
       payload = body.orders ? { orders: body.orders } : await tiny.listOrders({ page: body.page || 1, limit: body.limit || 50 });
-      await logSyncJob({
-        accountId: ctx.accountId,
-        kind: 'tiny_import_orders',
-        status: 'success',
-        payload: body,
-        response: payload,
-        idempotencyKey,
-        correlationId: ctx.correlationId
-      });
+      await logSyncJob({ accountId: ctx.accountId, kind: 'tiny_import_orders', status: 'success', payload: body, response: payload, idempotencyKey, correlationId: ctx.correlationId });
     } catch (error) {
-      await logSyncJob({
-        accountId: ctx.accountId,
-        kind: 'tiny_import_orders',
-        status: 'error',
-        payload: body,
-        error: error.message,
-        attempts: 1,
-        idempotencyKey,
-        correlationId: ctx.correlationId
-      });
+      await logSyncJob({ accountId: ctx.accountId, kind: 'tiny_import_orders', status: 'error', payload: body, error: error.message, attempts: 1, idempotencyKey, correlationId: ctx.correlationId });
       throw error;
     }
 
@@ -85,5 +65,5 @@ export function registerOrderRoutes(app) {
 
     await logAudit({ accountId: ctx.accountId, userId: ctx.userId, entity: 'order', entityId: imported[0]?.id || 'batch', action: 'tiny_import', afterData: { count: imported.length }, correlationId: ctx.correlationId });
     return { importedCount: imported.length, imported, correlationId: ctx.correlationId };
-  });
+  }));
 }

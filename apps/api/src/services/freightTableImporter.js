@@ -1,26 +1,40 @@
 import XLSX from 'xlsx';
 
-const REQUIRED_SHEETS = ['Configurações', 'Tipo de carga', 'Rotas', 'Taxas por destinatário', 'TRT', 'TDA', 'GRIS-ADV'];
+const REQUIRED = {
+  'Configurações': ['Versão', 'Remetente'],
+  'Tipo de carga': ['Tipo', 'Ativo'],
+  Rotas: ['CEP inicial', 'CEP final', 'Peso inicial', 'Peso final', 'Valor base'],
+  'Taxas por destinatário': ['Documento', 'Tipo taxa', 'Valor'],
+  TRT: ['Faixa', 'Valor'],
+  TDA: ['Faixa', 'Valor'],
+  MODAL: ['Região', 'Modal'],
+  'GRIS-ADV': ['Faixa', 'GRIS %'],
+  'Restrição de entrega': ['Regra', 'Valor']
+};
 
 export function parseFreightXlsx(base64Content) {
   const workbook = XLSX.read(Buffer.from(base64Content, 'base64'), { type: 'buffer' });
-  const sheetNames = workbook.SheetNames;
   const errors = [];
 
-  for (const sheet of REQUIRED_SHEETS) {
-    if (!sheetNames.includes(sheet)) errors.push({ sheet, row: null, field: null, message: 'Aba obrigatória ausente' });
+  for (const [sheet, columns] of Object.entries(REQUIRED)) {
+    const rows = toJson(workbook, sheet);
+    if (!rows.length) {
+      errors.push({ sheet, linha: null, campo: null, erro: 'Aba obrigatória ausente ou vazia' });
+      continue;
+    }
+    for (const column of columns) {
+      if (!(column in rows[0])) errors.push({ sheet, linha: 1, campo: column, erro: 'Coluna obrigatória ausente' });
+    }
+    if (sheet === 'Rotas') validateRoutes(rows, errors);
+    if (sheet === 'Taxas por destinatário') validateRecipientFees(rows, errors);
   }
 
-  const configRows = toJson(workbook, 'Configurações');
   const routeRows = toJson(workbook, 'Rotas');
   const recipientRows = toJson(workbook, 'Taxas por destinatário');
-
-  validateColumns(routeRows, ['CEP inicial', 'CEP final', 'Peso inicial', 'Peso final', 'Valor base'], 'Rotas', errors);
-
   const routes = routeRows.map((r, idx) => ({
     line: idx + 2,
-    cep_start: r['CEP inicial'],
-    cep_end: r['CEP final'],
+    cep_start: String(r['CEP inicial'] || ''),
+    cep_end: String(r['CEP final'] || ''),
     min_weight: Number(r['Peso inicial'] || 0),
     max_weight: Number(r['Peso final'] || 0),
     base_amount: Number(r['Valor base'] || 0),
@@ -28,32 +42,48 @@ export function parseFreightXlsx(base64Content) {
     min_freight: Number(r['Frete mínimo'] || 0),
     ad_valorem_pct: Number(r['Ad valorem %'] || 0),
     gris_pct: Number(r['GRIS %'] || 0),
-    trt_amount: Number(r['TRT'] || 0),
-    tda_amount: Number(r['TDA'] || 0),
+    trt_amount: Number(r.TRT || 0),
+    tda_amount: Number(r.TDA || 0),
     cubing_factor: Number(r['Fator cubagem'] || 300),
-    sla_days: Number(r['Prazo'] || 7),
-    state: r['UF'] || null,
-    city: r['Cidade'] || null
+    sla_days: Number(r.Prazo || 7),
+    state: r.UF || null,
+    city: r.Cidade || null
   }));
 
   const recipientFees = recipientRows.map((r, idx) => ({
     line: idx + 2,
-    recipient_document: String(r['Documento'] || ''),
+    recipient_document: String(r.Documento || ''),
     fee_type: String(r['Tipo taxa'] || 'custom_fee'),
-    amount: Number(r['Valor'] || 0)
+    amount: Number(r.Valor || 0)
   }));
 
   return {
     ok: errors.length === 0,
     errors,
     preview: {
-      config: configRows[0] || {},
+      rotas_detectadas: routes.length,
+      taxas_detectadas: recipientFees.length,
+      erros: errors,
       routes: routes.slice(0, 20),
-      recipientFees: recipientFees.slice(0, 20),
-      counts: { routes: routes.length, recipientFees: recipientFees.length }
+      recipientFees: recipientFees.slice(0, 20)
     },
-    normalized: { config: configRows[0] || {}, routes, recipientFees }
+    normalized: { config: toJson(workbook, 'Configurações')[0] || {}, routes, recipientFees }
   };
+}
+
+function validateRoutes(rows, errors) {
+  rows.forEach((r, idx) => {
+    const line = idx + 2;
+    if (!isCep(r['CEP inicial'])) errors.push({ sheet: 'Rotas', linha: line, campo: 'CEP inicial', erro: 'valor inválido' });
+    if (!isCep(r['CEP final'])) errors.push({ sheet: 'Rotas', linha: line, campo: 'CEP final', erro: 'valor inválido' });
+    if (Number(r['Peso final']) < Number(r['Peso inicial'])) errors.push({ sheet: 'Rotas', linha: line, campo: 'Peso final', erro: 'menor que peso inicial' });
+  });
+}
+
+function validateRecipientFees(rows, errors) {
+  rows.forEach((r, idx) => {
+    if (!r.Documento) errors.push({ sheet: 'Taxas por destinatário', linha: idx + 2, campo: 'Documento', erro: 'obrigatório' });
+  });
 }
 
 function toJson(workbook, sheet) {
@@ -62,12 +92,7 @@ function toJson(workbook, sheet) {
   return XLSX.utils.sheet_to_json(ws, { defval: null });
 }
 
-function validateColumns(rows, requiredColumns, sheet, errors) {
-  if (!rows.length) {
-    errors.push({ sheet, row: null, field: null, message: 'Aba sem linhas' });
-    return;
-  }
-  for (const column of requiredColumns) {
-    if (!(column in rows[0])) errors.push({ sheet, row: 1, field: column, message: 'Coluna obrigatória ausente' });
-  }
+function isCep(v) {
+  const digits = String(v || '').replace(/\D/g, '');
+  return digits.length === 8;
 }

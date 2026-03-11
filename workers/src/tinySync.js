@@ -16,7 +16,9 @@ export async function runTinySyncBatch(limit = 50) {
   try {
     const jobs = await client.query(
       `select * from app.sync_jobs
-       where kind = 'tiny_status_sync' and status in ('pending','error') and attempts < 5
+       where kind = 'tiny_status_sync' and dead_letter = false
+         and status in ('pending','error') and attempts < 8
+         and coalesce(next_retry_at, now()) <= now()
        order by created_at asc
        limit $1`,
       [limit]
@@ -38,14 +40,14 @@ export async function runTinySyncBatch(limit = 50) {
         });
         const data = await response.json();
         if (!response.ok) throw new Error(`Tiny sync failed: ${response.status}`);
-        await client.query('update app.sync_jobs set status = $1, response = $2, updated_at = now(), correlation_id = $3 where id = $4', ['success', data, correlationId, job.id]);
-        await client.query(
-          `insert into app.audit_logs(account_id, entity, entity_id, action, after_data, correlation_id)
-           values($1,'sync_job',$2,'tiny_sync_success',$3,$4)`,
-          [job.account_id, job.id, { externalRef: job.external_ref }, correlationId]
-        );
+        await client.query('update app.sync_jobs set status = $1, response = $2, updated_at = now(), next_retry_at = null, correlation_id = $3 where id = $4', ['success', data, correlationId, job.id]);
       } catch (error) {
-        await client.query('update app.sync_jobs set status = $1, error = $2, attempts = $3, updated_at = now(), correlation_id = $4 where id = $5', ['error', error.message, attempts, correlationId, job.id]);
+        const delayMs = computeBackoffMs(attempts);
+        const deadLetter = attempts >= 8;
+        await client.query(
+          'update app.sync_jobs set status = $1, error = $2, attempts = $3, updated_at = now(), next_retry_at = now() + ($4 || \" milliseconds\")::interval, dead_letter = $5, correlation_id = $6 where id = $7',
+          [deadLetter ? 'dead_letter' : 'error', error.message, attempts, String(delayMs), deadLetter, correlationId, job.id]
+        );
       }
     }
     return { processed: jobs.rows.length };
@@ -53,6 +55,12 @@ export async function runTinySyncBatch(limit = 50) {
     client.release();
     await pool.end();
   }
+}
+
+function computeBackoffMs(attempt) {
+  const base = Math.min(60000, (2 ** attempt) * 1000);
+  const jitter = Math.floor(Math.random() * 500);
+  return base + jitter;
 }
 
 function cryptoRandom() {
