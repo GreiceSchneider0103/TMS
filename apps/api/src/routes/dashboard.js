@@ -13,7 +13,7 @@ export function registerDashboardRoutes(app) {
       `select count(*) as orders_total,
               count(*) filter (where status = 'READY_FOR_QUOTE') as pending_quote,
               count(*) filter (where status = 'QUOTED') as quoted,
-              sum(coalesce(shipping_amount,0)) as freight_revenue
+              sum(coalesce(invoice_amount,total_amount,0)) as freight_revenue
        from app.orders
        where account_id = $1 and created_at::date between $2 and $3 and ($4::text is null or channel = $4)`,
       [ctx.accountId, from, to, channel]

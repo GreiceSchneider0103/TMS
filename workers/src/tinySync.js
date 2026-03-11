@@ -15,12 +15,21 @@ export async function runTinySyncBatch(limit = 50) {
   const client = await pool.connect();
   try {
     const jobs = await client.query(
-      `select * from app.sync_jobs
-       where kind = 'tiny_status_sync' and dead_letter = false
-         and status in ('pending','error') and attempts < 8
-         and coalesce(next_retry_at, now()) <= now()
-       order by created_at asc
-       limit $1`,
+      `with picked as (
+         select id
+         from app.sync_jobs
+         where kind = 'tiny_status_sync' and dead_letter = false
+           and status in ('pending','error') and attempts < 8
+           and coalesce(next_retry_at, now()) <= now()
+         order by created_at asc
+         for update skip locked
+         limit $1
+       )
+       update app.sync_jobs sj
+       set status = 'processing', updated_at = now()
+       from picked
+       where sj.id = picked.id
+       returning sj.*`,
       [limit]
     );
 
@@ -28,7 +37,7 @@ export async function runTinySyncBatch(limit = 50) {
       const attempts = job.attempts + 1;
       const correlationId = job.correlation_id || cryptoRandom();
       try {
-        await client.query('update app.sync_jobs set status = $1, attempts = $2, updated_at = now(), correlation_id = $3 where id = $4', ['processing', attempts, correlationId, job.id]);
+        await client.query('update app.sync_jobs set attempts = $1, correlation_id = $2, updated_at = now() where id = $3', [attempts, correlationId, job.id]);
         const response = await fetch(new URL(`/orders/${job.external_ref}/status`, process.env.TINY_BASE_URL), {
           method: 'POST',
           headers: {
@@ -45,7 +54,8 @@ export async function runTinySyncBatch(limit = 50) {
         const delayMs = computeBackoffMs(attempts);
         const deadLetter = attempts >= 8;
         await client.query(
-          'update app.sync_jobs set status = $1, error = $2, attempts = $3, updated_at = now(), next_retry_at = now() + ($4 || \" milliseconds\")::interval, dead_letter = $5, correlation_id = $6 where id = $7',
+          `update app.sync_jobs set status = $1, error = $2, attempts = $3, updated_at = now(),
+             next_retry_at = now() + ($4 || ' milliseconds')::interval, dead_letter = $5, correlation_id = $6 where id = $7`,
           [deadLetter ? 'dead_letter' : 'error', error.message, attempts, String(delayMs), deadLetter, correlationId, job.id]
         );
       }

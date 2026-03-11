@@ -27,6 +27,10 @@ export function parseFreightXlsx(base64Content) {
     }
     if (sheet === 'Rotas') validateRoutes(rows, errors);
     if (sheet === 'Taxas por destinatário') validateRecipientFees(rows, errors);
+if (sheet === 'TRT' || sheet === 'TDA') validateRangeValueSheet(sheet, rows, errors);
+    if (sheet === 'MODAL') validateModal(rows, errors);
+    if (sheet === 'GRIS-ADV') validateGris(rows, errors);
+    if (sheet === 'Restrição de entrega') validateRestriction(rows, errors);
   }
 
   const routeRows = toJson(workbook, 'Rotas');
@@ -95,4 +99,35 @@ function toJson(workbook, sheet) {
 function isCep(v) {
   const digits = String(v || '').replace(/\D/g, '');
   return digits.length === 8;
+}
+
+
+function validateRangeValueSheet(sheet, rows, errors) {
+  rows.forEach((r, idx) => {
+    const line = idx + 2;
+    if (!r['Faixa']) errors.push({ sheet, linha: line, campo: 'Faixa', erro: 'obrigatório' });
+    if (Number.isNaN(Number(r['Valor']))) errors.push({ sheet, linha: line, campo: 'Valor', erro: 'valor inválido' });
+  });
+}
+
+function validateModal(rows, errors) {
+  rows.forEach((r, idx) => {
+    const line = idx + 2;
+    if (!r['Região']) errors.push({ sheet: 'MODAL', linha: line, campo: 'Região', erro: 'obrigatório' });
+    if (!r['Modal']) errors.push({ sheet: 'MODAL', linha: line, campo: 'Modal', erro: 'obrigatório' });
+  });
+}
+
+function validateGris(rows, errors) {
+  rows.forEach((r, idx) => {
+    const line = idx + 2;
+    if (Number.isNaN(Number(r['GRIS %']))) errors.push({ sheet: 'GRIS-ADV', linha: line, campo: 'GRIS %', erro: 'valor inválido' });
+  });
+}
+
+function validateRestriction(rows, errors) {
+  rows.forEach((r, idx) => {
+    const line = idx + 2;
+    if (!r['Regra']) errors.push({ sheet: 'Restrição de entrega', linha: line, campo: 'Regra', erro: 'obrigatório' });
+  });
 }

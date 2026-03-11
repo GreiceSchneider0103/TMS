@@ -21,3 +21,8 @@ pre { white-space: pre-wrap; max-height: 36vh; overflow: auto; }
   body { grid-template-columns: 1fr; }
   .kpis { grid-template-columns: repeat(2, 1fr); }
 }
+
+.grid2 { display:grid; grid-template-columns: repeat(2,minmax(220px,1fr)); gap:8px; }
+.notice{padding:8px 10px;border-radius:8px;margin:8px 0;}
+.notice.ok{background:#e9f8ef;color:#1a6e36;border:1px solid #9fdfb8;}
+.notice.err{background:#ffeaea;color:#9b1c1c;border:1px solid #f0aaaa;}

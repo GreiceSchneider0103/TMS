@@ -56,7 +56,7 @@ export async function resolveContext(req) {
     return ctx;
   }
 
-  throw new HttpError(401, 'Unauthorized context. Use x-api-key or Authorization Bearer token');
+  throw new HttpError(401, 'Unauthorized context. Use x-api-key, Authorization: Bearer <token>, or x-internal-token for trusted internal calls');
 }
 
 export function requireAnyRole(allowedRoles, handler) {
