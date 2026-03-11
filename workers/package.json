@@ -1,0 +1,12 @@
+{
+  "name": "tms-workers",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "node --check src/importFreightTable.js && node --check src/trackingPolling.js && node --check src/tinySync.js"
+  },
+  "dependencies": {
+    "pg": "8.13.1"
+  }
+}
