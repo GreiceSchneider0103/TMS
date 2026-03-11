@@ -1,4 +1,5 @@
 import pg from 'pg';
+import { computeBackoffMs, isDeadLetter } from './retryPolicy.js';
 
 export async function buildTinyStatusPayload(shipment) {
   return {
@@ -13,6 +14,7 @@ export async function buildTinyStatusPayload(shipment) {
 export async function runTinySyncBatch(limit = 50) {
   const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
   const client = await pool.connect();
+  const summary = { picked: 0, success: 0, error: 0, dead_letter: 0 };
   try {
     const jobs = await client.query(
       `with picked as (
@@ -32,6 +34,7 @@ export async function runTinySyncBatch(limit = 50) {
        returning sj.*`,
       [limit]
     );
+    summary.picked = jobs.rows.length;
 
     for (const job of jobs.rows) {
       const attempts = job.attempts + 1;
@@ -50,27 +53,24 @@ export async function runTinySyncBatch(limit = 50) {
         const data = await response.json();
         if (!response.ok) throw new Error(`Tiny sync failed: ${response.status}`);
         await client.query('update app.sync_jobs set status = $1, response = $2, updated_at = now(), next_retry_at = null, correlation_id = $3 where id = $4', ['success', data, correlationId, job.id]);
+        summary.success += 1;
       } catch (error) {
         const delayMs = computeBackoffMs(attempts);
-        const deadLetter = attempts >= 8;
+        const deadLetter = isDeadLetter(attempts);
         await client.query(
           `update app.sync_jobs set status = $1, error = $2, attempts = $3, updated_at = now(),
              next_retry_at = now() + ($4 || ' milliseconds')::interval, dead_letter = $5, correlation_id = $6 where id = $7`,
           [deadLetter ? 'dead_letter' : 'error', error.message, attempts, String(delayMs), deadLetter, correlationId, job.id]
         );
+        if (deadLetter) summary.dead_letter += 1;
+        else summary.error += 1;
       }
     }
-    return { processed: jobs.rows.length };
+    return summary;
   } finally {
     client.release();
     await pool.end();
   }
-}
-
-function computeBackoffMs(attempt) {
-  const base = Math.min(60000, (2 ** attempt) * 1000);
-  const jitter = Math.floor(Math.random() * 500);
-  return base + jitter;
 }
 
 function cryptoRandom() {

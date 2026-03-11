@@ -1,16 +1,7 @@
 import crypto from 'node:crypto';
 import { query, setDbContext } from '../db.js';
 import { HttpError } from './router.js';
-
-const ROLE_ALIASES = {
-  admin: 'admin',
-  operador: 'operador_logistico',
-  operador_logistico: 'operador_logistico',
-  financeiro: 'financeiro',
-  analista_integracao: 'analista_integracao',
-  integracao: 'analista_integracao',
-  visualizador: 'visualizador'
-};
+import { authorizeRole, normalizeRole } from './rbac.js';
 
 export async function resolveContext(req) {
   if (req.tmsContext) {
@@ -60,21 +51,14 @@ export async function resolveContext(req) {
 }
 
 export function requireAnyRole(allowedRoles, handler) {
-  const allowed = new Set(allowedRoles.map(normalizeRole));
   return async (ctxInput) => {
     const ctx = await resolveContext(ctxInput.req);
-    if (ctx.role !== 'admin' && !allowed.has(ctx.role)) {
-      throw new HttpError(403, `Forbidden for role ${ctx.role}`);
-    }
+    authorizeRole(ctx.role, allowedRoles);
     return handler({ ...ctxInput, ctx });
   };
 }
 
 export const requireRole = requireAnyRole;
-
-function normalizeRole(role) {
-  return ROLE_ALIASES[String(role || '').toLowerCase()] || 'visualizador';
-}
 
 function parseApiKey(req) {
   const fromHeader = req.headers['x-api-key'];
