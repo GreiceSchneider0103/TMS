@@ -40,7 +40,16 @@ export function registerOrderRoutes(app) {
       payload = body.orders ? { orders: body.orders } : await tiny.listOrders({ page: body.page || 1, limit: body.limit || 50, correlationId: ctx.correlationId });
       await logSyncJob({ accountId: ctx.accountId, kind: 'tiny_import_orders', status: 'success', payload: body, response: payload, idempotencyKey, correlationId: ctx.correlationId });
     } catch (error) {
-      await logSyncJob({ accountId: ctx.accountId, kind: 'tiny_import_orders', status: 'error', payload: body, error: error.message, response: error?.meta || null, attempts: 1, idempotencyKey, correlationId: ctx.correlationId });
+      await logSyncJob({
+        accountId: ctx.accountId,
+        kind: 'tiny_import_orders',
+        status: 'error',
+        payload: body,
+        error: JSON.stringify({ message: error.message, status: error.status || null, details: error.details || null }),
+        attempts: 1,
+        idempotencyKey,
+        correlationId: ctx.correlationId
+      });
       throw error;
     }
 
@@ -51,6 +60,8 @@ export function registerOrderRoutes(app) {
     await transaction(async (client) => {
       for (const o of orders) {
         const externalId = String(o.id || o.external_id || o.numero || crypto.randomUUID());
+        const totalAmount = Number(o.total || o.total_amount || 0);
+        const invoiceAmount = Number(o.invoice_amount || o.total || o.total_amount || 0);
         const upsert = await client.query(
           `insert into app.orders(account_id, external_id, order_number, channel, total_amount, invoice_amount, status, raw_payload)
            values($1,$2,$3,$4,$5,$6,'READY_FOR_QUOTE',$7)
@@ -58,7 +69,7 @@ export function registerOrderRoutes(app) {
            do update set order_number = excluded.order_number, channel = excluded.channel, total_amount = excluded.total_amount,
              invoice_amount = excluded.invoice_amount, raw_payload = excluded.raw_payload, updated_at = now()
            returning *`,
-          [ctx.accountId, externalId, String(o.number || o.numero || externalId), String(o.channel || o.canal || 'tiny'), Number(o.total || o.total_amount || 0), Number(o.invoice_amount || o.total || 0), o]
+          [ctx.accountId, externalId, String(o.number || o.numero || externalId), String(o.channel || o.canal || 'tiny'), totalAmount, invoiceAmount, o.raw || o]
         );
         imported.push(upsert.rows[0]);
       }

@@ -56,24 +56,36 @@ export async function runTrackingPollingCycle(fetchUpdates, limit = 100) {
       [limit]
     );
     let processed = 0;
+    let errors = 0;
     for (const s of shipments.rows) {
-      const events = await fetchUpdates(s);
-      if (!Array.isArray(events)) continue;
-      for (const evt of events) {
-        if (!evt?.id) continue;
-        const saved = await persistPolledTrackingEvent({
-          accountId: s.account_id,
-          shipmentId: s.id,
-          externalEventId: evt.id,
-          status: evt.status,
-          payload: evt,
-          occurredAt: evt.occurredAt,
-          client
-        });
-        if (saved) processed += 1;
+      try {
+        const events = await fetchUpdates(s);
+        for (const evt of events || []) {
+          const saved = await persistPolledTrackingEvent({
+            accountId: s.account_id,
+            shipmentId: s.id,
+            externalEventId: evt.id,
+            status: evt.status,
+            payload: evt.raw || evt,
+            occurredAt: evt.occurredAt,
+            client
+          });
+          if (saved) processed += 1;
+        }
+      } catch (error) {
+        errors += 1;
+        console.log(JSON.stringify({
+          ts: new Date().toISOString(),
+          event: 'tracking_polling_shipment_error',
+          shipment_id: s.id,
+          tracking_code: s.tracking_code,
+          error: error.message,
+          code: error.code || null,
+          provider_status: error.providerStatus || null
+        }));
       }
     }
-    return { shipments: shipments.rows.length, processed };
+    return { shipments: shipments.rows.length, processed, errors };
   } finally {
     client.release();
     await pool.end();

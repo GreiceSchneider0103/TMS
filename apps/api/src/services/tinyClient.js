@@ -26,9 +26,11 @@ export class TinyClient {
       query: { page, limit },
       correlationId
     });
+
+    const orders = this.extractOrders(payload).map((raw) => this.normalizeOrder(raw));
     return {
       ...payload,
-      orders: this.extractOrders(payload)
+      orders
     };
   }
 
@@ -93,12 +95,58 @@ export class TinyClient {
 
   extractOrders(payload) {
     if (!payload || typeof payload !== 'object') return [];
-    if (Array.isArray(payload.orders)) return payload.orders;
-    if (Array.isArray(payload.data)) return payload.data;
-    if (payload.retorno && Array.isArray(payload.retorno.pedidos)) return payload.retorno.pedidos;
-    if (payload.retorno && payload.retorno.pedidos && Array.isArray(payload.retorno.pedidos.pedido)) return payload.retorno.pedidos.pedido;
+
+    const candidates = [
+      payload.orders,
+      payload.data,
+      payload?.retorno?.pedidos,
+      payload?.retorno?.pedidos?.pedido,
+      payload?.retorno?.registros,
+      payload?.retorno?.registros?.registro
+    ];
+
+    for (const candidate of candidates) {
+      if (Array.isArray(candidate)) return candidate;
+    }
+
     return [];
   }
+
+  normalizeOrder(rawOrder) {
+    const o = rawOrder?.pedido || rawOrder?.order || rawOrder;
+    if (!o || typeof o !== 'object') return {};
+
+    const externalId = firstNonEmpty(o.id, o.idPedido, o.numeroPedido, o.numero, o.codigo);
+    const orderNumber = firstNonEmpty(o.number, o.numero, o.numeroPedido, externalId);
+    const channel = firstNonEmpty(o.channel, o.canal, o.origem, 'tiny');
+    const total = parseNumberish(firstNonEmpty(o.total, o.totalPedido, o.valor, o.valor_total, 0));
+    const invoiceAmount = parseNumberish(firstNonEmpty(o.invoice_amount, o.valorNota, o.totalNota, total));
+
+    return {
+      ...o,
+      id: externalId,
+      number: orderNumber,
+      channel,
+      total,
+      invoice_amount: invoiceAmount,
+      raw: rawOrder
+    };
+  }
+}
+
+function firstNonEmpty(...values) {
+  for (const v of values) {
+    if (v !== undefined && v !== null && String(v).trim() !== '') return v;
+  }
+  return null;
+}
+
+function parseNumberish(value) {
+  if (value === null || value === undefined) return 0;
+  if (typeof value === 'number') return Number.isFinite(value) ? value : 0;
+  const normalized = String(value).replace(/\./g, '').replace(',', '.').replace(/[^0-9.-]/g, '');
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : 0;
 }
 
 async function parseResponseBody(response) {

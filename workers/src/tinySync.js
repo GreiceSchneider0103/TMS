@@ -2,9 +2,6 @@ import pg from 'pg';
 import { computeBackoffMs, isDeadLetter } from './retryPolicy.js';
 import { TinyWorkerClient } from './tinyApiClient.js';
 
-const tinyTimeoutMs = Number(process.env.TINY_TIMEOUT_MS || 15000);
-const tinyStatusPathTemplate = process.env.TINY_ORDER_STATUS_PATH_TEMPLATE || '/orders/{externalOrderId}/status';
-
 export async function buildTinyStatusPayload(shipment) {
   return {
     pedido_id: shipment.external_order_id,
