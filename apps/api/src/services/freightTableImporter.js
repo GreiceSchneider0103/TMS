@@ -8,7 +8,7 @@ import {
   validateRestriction
 } from './freightTableValidation.js';
 
-const REQUIRED_SHEETS = ['Configurações', 'Tipo de carga', 'Rotas', 'Taxas por destinatário', 'TRT', 'TDA', 'MODAL', 'GRIS-ADV', 'Restrição de entrega'];
+export const REQUIRED_SHEETS = ['Configurações', 'Tipo de carga', 'Rotas', 'Taxas por destinatário', 'TRT', 'TDA', 'MODAL', 'GRIS-ADV', 'Restrição de entrega'];
 
 export function parseFreightXlsx(base64Content) {
   const workbook = XLSX.read(Buffer.from(base64Content, 'base64'), { type: 'buffer' });
@@ -74,7 +74,7 @@ function parseConfiguracoesSheet(workbook, errors) {
     const row = matrix[i];
     const keyCell = firstTextCell(row);
     if (!keyCell) continue;
-    if (!keyCell.endsWith(':')) continue;
+    if (!keyCell.value.endsWith(':')) continue;
     const value = nextCellValue(row, keyCell.index);
     config[normalizeConfigKey(keyCell.value)] = value;
   }
@@ -420,20 +420,5 @@ function toNumber(value) {
 
   normalized = normalized.replace(/[^0-9.-]/g, '');
   const parsed = Number(normalized);
-  return Number.isFinite(parsed) ? parsed : 0;
-}
-
-function normalizeCep(v) {
-  return String(v || '').replace(/\D/g, '').padStart(8, '0').slice(-8);
-}
-
-function normalizeDocument(v) {
-  return String(v || '').replace(/\D/g, '');
-}
-
-function toNumber(value) {
-  if (value === null || value === undefined || value === '') return 0;
-  if (typeof value === 'number') return Number.isFinite(value) ? value : 0;
-  const parsed = Number(String(value).replace(/\./g, '').replace(',', '.').replace(/[^0-9.-]/g, ''));
   return Number.isFinite(parsed) ? parsed : 0;
 }
