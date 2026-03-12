@@ -144,8 +144,8 @@ function parseRotasSheet(workbook, errors) {
 
   for (let r = headerRowIndex + 1; r < matrix.length; r++) {
     const row = matrix[r];
-    const cepIniRaw = clean(row[idxCepIni]);
-    const cepFimRaw = clean(row[idxCepFim]);
+    const cepIniRaw = normalizeCep(clean(row[idxCepIni]));
+    const cepFimRaw = normalizeCep(clean(row[idxCepFim]));
     if (!cepIniRaw && !cepFimRaw) continue;
 
     const canonical = {
@@ -197,6 +197,7 @@ function parseRotasSheet(workbook, errors) {
 
     if (emitted === 0) {
       const fallbackValue = toNumber(row[Math.max(idxCepFim + 1, 0)]);
+      if (fallbackValue <= 0) continue;
       canonical['Valor base'] = fallbackValue;
     }
 
@@ -239,7 +240,7 @@ function parseCepsPercentSheet(workbook, sheet, errors) {
 
 function parseModalSheet(workbook, errors) {
   const rows = rowsByDetectedHeader(workbook, 'MODAL', [['UF', 'CIDADE', 'CEP Inicial', 'CEP Final', 'Modal'], ['UF', 'Cidade', 'CEP Inicial', 'CEP Final', 'Modal']]);
-  if (!rows.length) {
+  if (!rows.length && !hasDetectedHeader(workbook, 'MODAL', [['UF', 'CIDADE', 'CEP Inicial', 'CEP Final', 'Modal'], ['UF', 'Cidade', 'CEP Inicial', 'CEP Final', 'Modal']])) {
     errors.push({ sheet: 'MODAL', linha: null, campo: null, erro: 'Cabeçalho real não encontrado (UF/CIDADE/CEP Inicial/CEP Final/Modal)' });
     return [];
   }
@@ -251,7 +252,7 @@ function parseModalSheet(workbook, errors) {
 
 function parseGrisSheet(workbook, errors) {
   const rows = rowsByDetectedHeader(workbook, 'GRIS-ADV', [['Faixa', 'GRIS %'], ['Calcular acima de: (Kg)', 'GRIS1']]);
-  if (!rows.length) {
+  if (!rows.length && !hasDetectedHeader(workbook, 'GRIS-ADV', [['Faixa', 'GRIS %'], ['Calcular acima de: (Kg)', 'GRIS1'], ['CEP Inicial', 'CEP Final', '% Percentual', 'Mínimo (R$)']])) {
     errors.push({ sheet: 'GRIS-ADV', linha: null, campo: null, erro: 'Cabeçalho real não encontrado para GRIS-ADV' });
     return [];
   }
@@ -298,6 +299,15 @@ function rowsByDetectedHeader(workbook, sheetName, requiredSets) {
   }
 
   return rows;
+}
+
+function hasDetectedHeader(workbook, sheetName, requiredSets) {
+  const matrix = sheetMatrix(workbook, sheetName);
+  if (!matrix.length) return false;
+  for (const req of requiredSets) {
+    if (findHeaderRow(matrix, req) >= 0) return true;
+  }
+  return false;
 }
 
 function sheetMatrix(workbook, sheetName) {
