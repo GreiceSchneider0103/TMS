@@ -422,3 +422,18 @@ function toNumber(value) {
   const parsed = Number(normalized);
   return Number.isFinite(parsed) ? parsed : 0;
 }
+
+function normalizeCep(v) {
+  return String(v || '').replace(/\D/g, '').padStart(8, '0').slice(-8);
+}
+
+function normalizeDocument(v) {
+  return String(v || '').replace(/\D/g, '');
+}
+
+function toNumber(value) {
+  if (value === null || value === undefined || value === '') return 0;
+  if (typeof value === 'number') return Number.isFinite(value) ? value : 0;
+  const parsed = Number(String(value).replace(/\./g, '').replace(',', '.').replace(/[^0-9.-]/g, ''));
+  return Number.isFinite(parsed) ? parsed : 0;
+}
