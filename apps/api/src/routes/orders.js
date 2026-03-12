@@ -40,7 +40,7 @@ export function registerOrderRoutes(app) {
       payload = body.orders ? { orders: body.orders } : await tiny.listOrders({ page: body.page || 1, limit: body.limit || 50, correlationId: ctx.correlationId });
       await logSyncJob({ accountId: ctx.accountId, kind: 'tiny_import_orders', status: 'success', payload: body, response: payload, idempotencyKey, correlationId: ctx.correlationId });
     } catch (error) {
-      await logSyncJob({ accountId: ctx.accountId, kind: 'tiny_import_orders', status: 'error', payload: body, error: error.message, attempts: 1, idempotencyKey, correlationId: ctx.correlationId });
+      await logSyncJob({ accountId: ctx.accountId, kind: 'tiny_import_orders', status: 'error', payload: body, error: error.message, response: error?.meta || null, attempts: 1, idempotencyKey, correlationId: ctx.correlationId });
       throw error;
     }
 
