@@ -1,3 +1,5 @@
+-- Formaliza ajustes aplicados em homologação
+
 create extension if not exists pgcrypto;
 
 create or replace function app.authenticate_api_key(raw_api_key text)
@@ -9,7 +11,7 @@ as $$
 declare
   v_hash text;
 begin
-  v_hash := encode(extensions.digest(raw_api_key::bytea, 'sha256'::text), 'hex');
+  v_hash := encode(extensions.digest(raw_api_key, 'sha256'), 'hex');
 
   return query
   select c.id, c.account_id, c.role
@@ -42,8 +44,10 @@ grant execute on function app.touch_api_credential(uuid) to anon, authenticated,
 create unique index if not exists uq_webhook_logs_account_provider_event_key
   on app.webhook_logs(account_id, provider, event_key);
 
-create unique index if not exists uq_tracking_events_account_shipment_external_event
+drop index if exists app.uq_tracking_external_event;
+create unique index if not exists uq_tracking_external_event
   on app.tracking_events(account_id, shipment_id, external_event_id);
 
-create unique index if not exists uq_sync_jobs_account_kind_idempotency_key
+drop index if exists app.uq_sync_jobs_idempotency;
+create unique index if not exists uq_sync_jobs_idempotency
   on app.sync_jobs(account_id, kind, idempotency_key);
