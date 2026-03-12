@@ -4,7 +4,10 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "check": "node --check src/importFreightTable.js && node --check src/trackingPolling.js && node --check src/retryPolicy.js && node --check src/tinySync.js"
+    "check": "node --check src/importFreightTable.js && node --check src/trackingPolling.js && node --check src/retryPolicy.js && node --check src/tinySync.js && node --check src/runner.js",
+    "start:tiny": "WORKER_MODE=tiny node src/runner.js",
+    "start:tracking": "WORKER_MODE=tracking node src/runner.js",
+    "start:all": "WORKER_MODE=all node src/runner.js"
   },
   "dependencies": {
     "pg": "8.13.1"

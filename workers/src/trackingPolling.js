@@ -44,6 +44,8 @@ export async function persistPolledTrackingEvent({ accountId, shipmentId, extern
 }
 
 export async function runTrackingPollingCycle(fetchUpdates, limit = 100) {
+  if (typeof fetchUpdates !== 'function') throw new Error('fetchUpdates function is required');
+
   const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
   const client = await pool.connect();
   try {
@@ -56,7 +58,9 @@ export async function runTrackingPollingCycle(fetchUpdates, limit = 100) {
     let processed = 0;
     for (const s of shipments.rows) {
       const events = await fetchUpdates(s);
-      for (const evt of events || []) {
+      if (!Array.isArray(events)) continue;
+      for (const evt of events) {
+        if (!evt?.id) continue;
         const saved = await persistPolledTrackingEvent({
           accountId: s.account_id,
           shipmentId: s.id,
@@ -74,4 +78,40 @@ export async function runTrackingPollingCycle(fetchUpdates, limit = 100) {
     client.release();
     await pool.end();
   }
+}
+
+export async function runTrackingPollingWorker({ fetchUpdates, limit = 100, intervalMs = 30000, maxCycles = null, logger = console } = {}) {
+  if (!process.env.DATABASE_URL) throw new Error('Missing DATABASE_URL');
+  if (typeof fetchUpdates !== 'function') throw new Error('fetchUpdates function is required');
+
+  let cycles = 0;
+  let running = true;
+  const stop = () => {
+    running = false;
+  };
+
+  process.on('SIGTERM', stop);
+  process.on('SIGINT', stop);
+
+  while (running) {
+    cycles += 1;
+    const startedAt = new Date().toISOString();
+    try {
+      const summary = await runTrackingPollingCycle(fetchUpdates, limit);
+      logger.info(JSON.stringify({ worker: 'trackingPolling', event: 'cycle_ok', startedAt, summary }));
+    } catch (error) {
+      logger.error(JSON.stringify({ worker: 'trackingPolling', event: 'cycle_error', startedAt, error: error.message }));
+    }
+
+    if (maxCycles && cycles >= maxCycles) break;
+    if (!running) break;
+    await sleep(intervalMs);
+  }
+
+  process.off('SIGTERM', stop);
+  process.off('SIGINT', stop);
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
