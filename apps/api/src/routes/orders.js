@@ -37,14 +37,15 @@ export function registerOrderRoutes(app) {
 
     let payload;
     try {
-      payload = body.orders ? { orders: body.orders } : await tiny.listOrders({ page: body.page || 1, limit: body.limit || 50 });
+      payload = body.orders ? { orders: body.orders } : await tiny.listOrders({ page: body.page || 1, limit: body.limit || 50, correlationId: ctx.correlationId });
       await logSyncJob({ accountId: ctx.accountId, kind: 'tiny_import_orders', status: 'success', payload: body, response: payload, idempotencyKey, correlationId: ctx.correlationId });
     } catch (error) {
       await logSyncJob({ accountId: ctx.accountId, kind: 'tiny_import_orders', status: 'error', payload: body, error: error.message, attempts: 1, idempotencyKey, correlationId: ctx.correlationId });
       throw error;
     }
 
-    const orders = payload.orders || payload.data || [];
+    const orders = payload.orders || [];
+    if (!Array.isArray(orders)) throw new Error('Tiny payload inválido: lista de pedidos ausente');
     const imported = [];
 
     await transaction(async (client) => {
