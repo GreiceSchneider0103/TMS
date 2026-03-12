@@ -44,7 +44,8 @@ export function registerOrderRoutes(app) {
       throw error;
     }
 
-    const orders = payload.orders || payload.data || [];
+    const orders = payload.orders || [];
+    if (!Array.isArray(orders)) throw new Error('Tiny payload inválido: lista de pedidos ausente');
     const imported = [];
 
     await transaction(async (client) => {
