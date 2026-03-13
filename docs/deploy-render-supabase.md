@@ -12,6 +12,18 @@
 - `TINY_API_TOKEN`
 - `PORT` (API)
 - `INTERNAL_CONTEXT_TOKEN` (somente para integração interna controlada)
+- `CORS_ALLOWED_ORIGINS` (opcional, CSV; ex.: `https://my-ui.app.github.dev,https://*.app.github.dev`)
+- `CORS_ALLOWED_HEADERS` (opcional, CSV; default: `content-type,x-api-key,x-correlation-id`)
+
+## Variáveis recomendadas para worker contínuo
+- `WORKER_NAME` (ex.: `tiny-sync-worker-prod-1` / `tracking-polling-worker-prod-1`)
+- `WORKER_POLL_INTERVAL_MS` (default `5000` para sync e `10000` para tracking)
+- `WORKER_TINY_SYNC_BATCH_SIZE` (default `50`)
+- `WORKER_TRACKING_BATCH_SIZE` (default `100`)
+- `WORKER_IDLE_BACKOFF_MS` (default `2000`)
+- `WORKER_FAILURE_BACKOFF_MS` (default `7000`)
+- `TINY_TIMEOUT_MS` (default `15000`)
+- `TINY_TRACKING_EVENTS_PATH` (default `/shipments/{trackingCode}/events`)
 
 ## Variáveis recomendadas para worker contínuo
 - `WORKER_NAME` (ex.: `tiny-sync-worker-prod-1` / `tracking-polling-worker-prod-1`)
