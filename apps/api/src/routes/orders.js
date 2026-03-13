@@ -3,13 +3,14 @@ import { query, transaction } from '../db.js';
 import { TinyClient } from '../services/tinyClient.js';
 import { requireAnyRole } from '../utils/context.js';
 import { logAudit, logSyncJob } from '../services/audit.js';
+import { parseIntWithBounds } from '../utils/validation.js';
 
 const tiny = new TinyClient();
 
 export function registerOrderRoutes(app) {
   app.get('/orders', requireAnyRole(['operador_logistico', 'financeiro', 'visualizador', 'analista_integracao'], async ({ ctx, query: qs }) => {
-    const limit = Number(qs.limit || 50);
-    const offset = Number(qs.offset || 0);
+    const limit = parseIntWithBounds(qs.limit, 50, { fieldName: 'limit', min: 1, max: 500 });
+    const offset = parseIntWithBounds(qs.offset, 0, { fieldName: 'offset', min: 0, max: 1000000 });
     const { rows } = await query(
       `select * from app.orders where account_id = $1 order by created_at desc limit $2 offset $3`,
       [ctx.accountId, limit, offset]
