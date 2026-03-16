@@ -93,6 +93,94 @@ export async function runTinySyncBatch(limit = 50, options = {}) {
   }
 }
 
+export async function runTinySyncWorker({ batchLimit = 50, intervalMs = 10000, maxCycles = null, logger = console } = {}) {
+  assertTinyWorkerConfig();
+
+  let cycles = 0;
+  let running = true;
+  const stop = () => {
+    running = false;
+  };
+
+  process.on('SIGTERM', stop);
+  process.on('SIGINT', stop);
+
+  while (running) {
+    cycles += 1;
+    const startedAt = new Date().toISOString();
+    try {
+      const summary = await runTinySyncBatch(batchLimit);
+      logger.info(JSON.stringify({ worker: 'tinySync', event: 'cycle_ok', startedAt, summary }));
+    } catch (error) {
+      logger.error(JSON.stringify({ worker: 'tinySync', event: 'cycle_error', startedAt, error: error.message, meta: error.meta || null }));
+    }
+
+    if (maxCycles && cycles >= maxCycles) break;
+    if (!running) break;
+    await sleep(intervalMs);
+  }
+
+  process.off('SIGTERM', stop);
+  process.off('SIGINT', stop);
+}
+
+function assertTinyWorkerConfig() {
+  if (!process.env.DATABASE_URL) throw new Error('Missing DATABASE_URL');
+  if (!process.env.TINY_BASE_URL) throw new Error('Missing TINY_BASE_URL');
+  if (!process.env.TINY_API_TOKEN) throw new Error('Missing TINY_API_TOKEN');
+}
+
+function tinyStatusUrl(externalOrderId) {
+  const path = tinyStatusPathTemplate.replace('{externalOrderId}', encodeURIComponent(String(externalOrderId || '')));
+  return new URL(path, process.env.TINY_BASE_URL);
+}
+
+async function postTinyStatus({ url, body, correlationId }) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), tinyTimeoutMs);
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      signal: controller.signal,
+      headers: {
+        Authorization: `Bearer ${process.env.TINY_API_TOKEN}`,
+        'content-type': 'application/json',
+        'x-correlation-id': correlationId
+      },
+      body: JSON.stringify(body || {})
+    });
+    const payload = await readJsonSafe(response);
+    return { status: response.status, payload };
+  } catch (error) {
+    if (error?.name === 'AbortError') {
+      throw syncError('Tiny sync timeout', { timeoutMs: tinyTimeoutMs, url: String(url) });
+    }
+    throw syncError('Tiny sync request error', { url: String(url), cause: error?.message || String(error) });
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function syncError(message, meta = {}) {
+  const err = new Error(message);
+  err.meta = meta;
+  return err;
+}
+
+async function readJsonSafe(response) {
+  const text = await response.text();
+  if (!text) return null;
+  try {
+    return JSON.parse(text);
+  } catch {
+    return { raw: text };
+  }
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 function cryptoRandom() {
   return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }

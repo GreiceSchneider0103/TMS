@@ -40,12 +40,27 @@ export function registerQuoteRoutes(app) {
 
   app.patch('/quotes/results/:id/select', requireAnyRole(['operador_logistico'], async ({ ctx, params }) => {
     await transaction(async (client) => {
-      const selected = await client.query('select request_id from app.quote_results where account_id = $1 and id = $2', [ctx.accountId, params.id]);
+      const selected = await client.query(
+        `select qr.request_id, qreq.order_id
+         from app.quote_results qr
+         join app.quote_requests qreq on qreq.id = qr.request_id
+         where qr.account_id = $1 and qr.id = $2`,
+        [ctx.accountId, params.id]
+      );
       if (!selected.rows[0]) throw new Error('Quote result not found');
+
       const requestId = selected.rows[0].request_id;
+      const orderId = selected.rows[0].order_id;
+
       await client.query('update app.quote_results set selected = false where account_id = $1 and request_id = $2', [ctx.accountId, requestId]);
       await client.query('update app.quote_results set selected = true where account_id = $1 and id = $2', [ctx.accountId, params.id]);
-      await client.query("update app.orders set status = 'QUOTED', updated_at = now() where account_id = $1 and id in (select order_id from app.quote_requests where id = $2)", [ctx.accountId, requestId]);
+
+      if (orderId) {
+        await client.query(
+          "update app.orders set status = 'QUOTED', updated_at = now() where account_id = $1 and id = $2",
+          [ctx.accountId, orderId]
+        );
+      }
     });
     return { selected: true, correlationId: ctx.correlationId };
   }));
