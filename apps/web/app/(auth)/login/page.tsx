@@ -19,10 +19,19 @@ export default function LoginPage() {
         <button
           onClick={() => {
             if (!email || !password || !apiKey) return alert('Preencha email, senha e api key');
-            localStorage.setItem('tms_email', email);
-            localStorage.setItem('tms_api_key', apiKey);
-            document.cookie = 'tms_session=1; path=/';
-            router.push('/dashboard');
+            fetch('/api/session/login', {
+              method: 'POST',
+              headers: { 'content-type': 'application/json' },
+              body: JSON.stringify({ email, password, apiKey })
+            })
+              .then(async (res) => {
+                if (!res.ok) {
+                  const data = await res.json();
+                  throw new Error(data.error || 'Falha no login');
+                }
+                router.push('/dashboard');
+              })
+              .catch((err) => alert(err.message));
           }}
         >
           Entrar
