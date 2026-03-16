@@ -15,6 +15,7 @@ import { registerProductRoutes } from './routes/products.js';
 import { registerProductLogisticsRoutes } from './routes/productLogistics.js';
 import { registerRecipientRoutes } from './routes/recipients.js';
 import { registerLogRoutes } from './routes/logs.js';
+import { applyCors } from './utils/cors.js';
 
 const app = router();
 registerOrderRoutes(app);
@@ -35,6 +36,19 @@ registerLogRoutes(app);
 app.get('/health', async () => ({ ok: true }));
 
 const server = http.createServer(async (req, res) => {
+  const cors = applyCors(req, res);
+
+  if (req.method === 'OPTIONS') {
+    if (cors.allowed) {
+      res.writeHead(204);
+      res.end();
+      return;
+    }
+    res.writeHead(403, { 'content-type': 'application/json' });
+    res.end(JSON.stringify({ error: 'CORS origin not allowed' }));
+    return;
+  }
+
   await runWithDbContext(null, async () => {
     const handled = await app.handle(req, res);
     if (!handled) {

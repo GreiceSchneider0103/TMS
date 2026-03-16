@@ -12,7 +12,7 @@ export function registerFreightTableRoutes(app) {
       const file = await client.query(
         `insert into app.files(account_id, storage_bucket, storage_path, file_name, mime_type, byte_size, metadata)
          values($1,'freight-tables',$2,$3,$4,$5,$6) returning *`,
-        [ctx.accountId, `uploads/${Date.now()}-${body.fileName}`, body.fileName || 'table.xlsx', body.mimeType || 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', body.byteSize || 0, { source: 'api' }]
+        [ctx.accountId, `uploads/${Date.now()}-${body.fileName}`, body.fileName || 'table.xlsx', body.mimeType || 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', body.byteSize || 0, { source: 'api', preview_counts: parsed.preview.counts }]
       );
       const table = await client.query(`insert into app.freight_tables(account_id, name, carrier_id) values($1,$2,$3) returning *`, [ctx.accountId, body.tableName, body.carrierId || null]);
       const version = await client.query(
@@ -38,12 +38,18 @@ export function registerFreightTableRoutes(app) {
   }));
 
   app.post('/freight-tables/versions/:id/publish', requireAnyRole(['admin', 'operador_logistico'], async ({ ctx, params }) => {
+    const version = await query('select * from app.freight_table_versions where account_id = $1 and id = $2', [ctx.accountId, params.id]);
+    if (!version.rows[0]) throw new Error('Version not found');
+
     await query('select app.publish_freight_table_version($1)', [params.id]);
     await logAudit({ accountId: ctx.accountId, userId: ctx.userId, entity: 'freight_table_version', entityId: params.id, action: 'publish', correlationId: ctx.correlationId });
     return { published: true, versionId: params.id, correlationId: ctx.correlationId };
   }));
 
   app.post('/freight-tables/versions/:id/rollback', requireAnyRole(['admin'], async ({ ctx, params }) => {
+    const version = await query('select * from app.freight_table_versions where account_id = $1 and id = $2', [ctx.accountId, params.id]);
+    if (!version.rows[0]) throw new Error('Version not found');
+
     await query('select app.rollback_freight_table_version($1)', [params.id]);
     await logAudit({ accountId: ctx.accountId, userId: ctx.userId, entity: 'freight_table_version', entityId: params.id, action: 'rollback', correlationId: ctx.correlationId });
     return { rolledBack: true, versionId: params.id, correlationId: ctx.correlationId };

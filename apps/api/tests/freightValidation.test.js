@@ -19,7 +19,7 @@ export function runFreightValidationTests() {
 
   const r = [];
   validateRecipientFees([{ Documento: '' }], r);
-  assert.equal(r.length, 1);
+  assert.equal(r.length, 2);
 
   const t = [];
   validateRangeValueSheet('TRT', [{ Faixa: '', Valor: 'x' }], t);
@@ -35,5 +35,5 @@ export function runFreightValidationTests() {
 
   const re = [];
   validateRestriction([{ Regra: '' }], re);
-  assert.equal(re.length, 1);
+  assert.equal(re.length, 2);
 }

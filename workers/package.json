@@ -4,7 +4,10 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "check": "node --check src/importFreightTable.js && node --check src/trackingPolling.js && node --check src/retryPolicy.js && node --check src/tinySync.js"
+    "check": "node --check src/importFreightTable.js && node --check src/trackingPolling.js && node --check src/retryPolicy.js && node --check src/tinySync.js && node --check src/tinyApiClient.js && node --check src/tinyTrackingClient.js && node --check src/main.js && node --check src/trackingMain.js",
+    "start": "node src/main.js",
+    "start:once": "node -e \"import('./src/tinySync.js').then(async (m)=>{const r=await m.runTinySyncBatch(Number(process.env.WORKER_TINY_SYNC_BATCH_SIZE||50),{workerName:process.env.WORKER_NAME||'tiny-sync-worker-once'});console.log(JSON.stringify(r));process.exit(0)}).catch((e)=>{console.error(e);process.exit(1)})\"",
+    "start:tracking": "node src/trackingMain.js"
   },
   "dependencies": {
     "pg": "8.13.1"

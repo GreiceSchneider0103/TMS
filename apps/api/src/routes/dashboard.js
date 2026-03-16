@@ -1,12 +1,13 @@
 import { query } from '../db.js';
 import { requireAnyRole } from '../utils/context.js';
+import { parseIsoDateOrDefault, parseOptionalUuid } from '../utils/validation.js';
 
 export function registerDashboardRoutes(app) {
   app.get('/dashboard/summary', requireAnyRole(['financeiro', 'operador_logistico', 'visualizador'], async ({ ctx, query: qs }) => {
-    const from = qs.from || '1970-01-01';
-    const to = qs.to || '2999-12-31';
+    const from = parseIsoDateOrDefault(qs.from, '1970-01-01', 'from');
+    const to = parseIsoDateOrDefault(qs.to, '2999-12-31', 'to');
     const channel = qs.channel || null;
-    const carrierId = qs.carrierId || null;
+    const carrierId = parseOptionalUuid(qs.carrierId, 'carrierId');
     const state = qs.state || null;
 
     const totals = await query(

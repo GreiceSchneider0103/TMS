@@ -29,9 +29,26 @@ export function router() {
           res.end(JSON.stringify(data));
         }
       } catch (error) {
-        const status = Number(error?.status || 400);
+        const status = Number.isInteger(error?.status) ? error.status : 500;
+        const message = extractErrorMessage(error);
+        const code = error?.code ? String(error.code) : null;
+
+        if (status >= 500 || !error?.status) {
+          console.error(JSON.stringify({
+            ts: new Date().toISOString(),
+            event: 'api_route_error',
+            method: req.method,
+            path: url.pathname,
+            message,
+            code,
+            detail: error?.detail || null,
+            hint: error?.hint || null,
+            stack: error?.stack || null
+          }));
+        }
+
         res.writeHead(status, { 'content-type': 'application/json' });
-        res.end(JSON.stringify({ error: error.message }));
+        res.end(JSON.stringify({ error: message, ...(code ? { code } : {}) }));
       }
       return true;
     }
@@ -52,5 +69,29 @@ async function readBody(req) {
   for await (const chunk of req) chunks.push(chunk);
   if (!chunks.length) return {};
   const text = Buffer.concat(chunks).toString('utf8');
-  return text ? JSON.parse(text) : {};
+  if (!text) return {};
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw new HttpError(400, 'Invalid JSON body');
+  }
+}
+
+function extractErrorMessage(error) {
+  if (!error) return 'Unexpected error';
+  if (typeof error === 'string' && error.trim()) return error;
+
+  const candidates = [
+    error.message,
+    error.detail,
+    error.hint,
+    error.reason,
+    error.cause?.message
+  ];
+
+  for (const item of candidates) {
+    if (typeof item === 'string' && item.trim()) return item;
+  }
+
+  return 'Unexpected error';
 }
