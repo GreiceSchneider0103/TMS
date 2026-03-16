@@ -1,0 +1,128 @@
+services:
+  - type: web
+    name: tms-api
+    runtime: node
+    rootDir: apps/api
+    plan: starter
+    buildCommand: npm ci
+    startCommand: npm run dev
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: DATABASE_URL
+        sync: false
+      - key: TINY_BASE_URL
+        sync: false
+      - key: TINY_API_TOKEN
+        sync: false
+      - key: INTERNAL_CONTEXT_TOKEN
+        sync: false
+      - key: CORS_ALLOWED_ORIGINS
+        sync: false
+      - key: CORS_ALLOWED_HEADERS
+        value: content-type,x-api-key,x-correlation-id,x-request-id,x-idempotency-key
+      - key: RATE_LIMIT_AUTH_MAX
+        value: 5
+      - key: RATE_LIMIT_AUTH_WINDOW_MS
+        value: 60000
+      - key: RATE_LIMIT_WEBHOOK_MAX
+        value: 60
+      - key: RATE_LIMIT_WEBHOOK_WINDOW_MS
+        value: 60000
+      - key: RATE_LIMIT_API_MAX
+        value: 120
+      - key: RATE_LIMIT_API_WINDOW_MS
+        value: 60000
+      - key: REQUEST_BODY_LIMIT_BYTES
+        value: 1048576
+      - key: SESSION_COOKIE_NAME
+        value: tms_api_session
+
+  - type: worker
+    name: tms-worker-tiny-sync
+    runtime: node
+    rootDir: workers
+    plan: starter
+    buildCommand: npm ci
+    startCommand: npm run start
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: TINY_BASE_URL
+        sync: false
+      - key: TINY_API_TOKEN
+        sync: false
+      - key: WORKER_NAME
+        value: tiny-sync-worker-render
+      - key: WORKER_POLL_INTERVAL_MS
+        value: 5000
+      - key: WORKER_TINY_SYNC_BATCH_SIZE
+        value: 50
+      - key: WORKER_IDLE_BACKOFF_MS
+        value: 2000
+      - key: WORKER_FAILURE_BACKOFF_MS
+        value: 7000
+      - key: TINY_TIMEOUT_MS
+        value: 15000
+
+  - type: worker
+    name: tms-worker-tracking
+    runtime: node
+    rootDir: workers
+    plan: starter
+    buildCommand: npm ci
+    startCommand: npm run start:tracking
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: TINY_BASE_URL
+        sync: false
+      - key: TINY_API_TOKEN
+        sync: false
+      - key: WORKER_NAME
+        value: tracking-polling-worker-render
+      - key: WORKER_POLL_INTERVAL_MS
+        value: 10000
+      - key: WORKER_TRACKING_BATCH_SIZE
+        value: 100
+      - key: WORKER_IDLE_BACKOFF_MS
+        value: 2000
+      - key: WORKER_FAILURE_BACKOFF_MS
+        value: 7000
+      - key: TINY_TIMEOUT_MS
+        value: 15000
+      - key: TINY_TRACKING_EVENTS_PATH
+        value: /shipments/{trackingCode}/events
+
+  - type: web
+    name: tms-web
+    runtime: node
+    rootDir: apps/web
+    plan: starter
+    buildCommand: npm ci && npm run build
+    startCommand: npm run start
+    healthCheckPath: /login
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NEXT_PUBLIC_API_BASE_URL
+        sync: false
+      - key: SESSION_COOKIE_NAME
+        value: tms_api_session
+      - key: SESSION_MAX_AGE_SECONDS
+        value: 28800
+      - key: SESSION_COOKIE_SECURE
+        value: true
+      - key: SESSION_COOKIE_DOMAIN
+        sync: false
