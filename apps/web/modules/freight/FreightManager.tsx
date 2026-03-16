@@ -1,7 +1,17 @@
 'use client';
 import { useState } from 'react';
 import { api } from '@/services/api';
-import { JsonView } from '@/components/JsonView';
+import { PageHeader } from '@/components/ui/PageHeader';
+import { Panel } from '@/components/ui/Panel';
+import { StatusBadge } from '@/components/ui/StatusBadge';
+import { LoadingState } from '@/components/ui/LoadingState';
+
+const mockRows = [
+  { name: 'Tabela Correios 2026', carrier: 'Correios', version: 'v3.2', status: 'Publicada', date: '01/03/2026' },
+  { name: 'Tabela Jadlog Q1', carrier: 'Jadlog', version: 'v2.1', status: 'Publicada', date: '28/02/2026' },
+  { name: 'Total Express Standard', carrier: 'Total Express', version: 'v1.8', status: 'Publicada', date: '25/02/2026' },
+  { name: 'Azul Cargo Premium', carrier: 'Azul Cargo', version: 'v2.0', status: 'Rascunho', date: '15/03/2026' }
+];
 
 export function FreightManager() {
   const [out, setOut] = useState<any>(null);
@@ -27,11 +37,7 @@ export function FreightManager() {
       const importedVersionId = res?.version?.id ? String(res.version.id) : '';
       setOut(res);
       setVersionId(importedVersionId);
-      if (importedVersionId) {
-        setMessage(`Import concluído. Versão selecionada: ${importedVersionId}`);
-      } else {
-        setMessage('Import concluído, mas sem version.id retornado. Verifique o resultado antes de publicar.');
-      }
+      setMessage(importedVersionId ? `Import concluído. Versão ${importedVersionId}` : 'Import concluído sem versionId retornado.');
     } catch (error: any) {
       setMessage(`Falha no import: ${error?.message || 'erro inesperado'}`);
     } finally {
@@ -41,52 +47,61 @@ export function FreightManager() {
 
   async function runVersionAction(action: 'publish' | 'rollback') {
     const trimmed = versionId.trim();
-    if (!trimmed) {
-      setMessage('Selecione/importe uma tabela antes de publicar ou fazer rollback. versionId está vazio.');
-      return;
-    }
+    if (!trimmed) return setMessage('Informe versionId para executar a ação.');
 
     setBusy(true);
-    setMessage(action === 'publish' ? `Publicando versão ${trimmed}...` : `Executando rollback da versão ${trimmed}...`);
     try {
-      const endpoint = action === 'publish'
-        ? `/freight-tables/versions/${trimmed}/publish`
-        : `/freight-tables/versions/${trimmed}/rollback`;
+      const endpoint = action === 'publish' ? `/freight-tables/versions/${trimmed}/publish` : `/freight-tables/versions/${trimmed}/rollback`;
       const res = await api(endpoint, { method: 'POST', body: '{}' });
       setOut(res);
-      setMessage(action === 'publish' ? `Versão ${trimmed} publicada com sucesso.` : `Rollback da versão ${trimmed} executado com sucesso.`);
+      setMessage(action === 'publish' ? `Versão ${trimmed} publicada.` : `Rollback da versão ${trimmed} executado.`);
     } catch (error: any) {
-      setMessage(`Falha ao ${action === 'publish' ? 'publicar' : 'executar rollback'}: ${error?.message || 'erro inesperado'}`);
+      setMessage(`Falha: ${error?.message || 'erro inesperado'}`);
     } finally {
       setBusy(false);
     }
   }
 
+  const previewRows = out?.preview?.rows || out?.version?.stats || null;
+
   return (
-    <div className="card">
-      <h2>Gestão de tabela de frete</h2>
-      <div className="row">
-        <input
-          type="file"
-          accept=".xlsx"
-          disabled={busy}
-          onChange={async (e) => {
-            const file = e.target.files?.[0];
-            if (!file) return;
-            await importWorkbook(file);
-          }}
-        />
-        <input
-          placeholder="versionId"
-          value={versionId}
-          disabled={busy}
-          onChange={(e) => setVersionId(e.target.value)}
-        />
-        <button disabled={busy || !versionId.trim()} onClick={async () => runVersionAction('publish')}>Publicar</button>
-        <button disabled={busy || !versionId.trim()} onClick={async () => runVersionAction('rollback')}>Rollback</button>
-      </div>
-      {message ? <p>{message}</p> : null}
-      <JsonView data={out} />
+    <div className="grid">
+      <PageHeader title="Tabelas de Frete" subtitle="Gerenciar tabelas de preços e prazos" actions={<label className="btn primary" style={{ display: 'inline-flex' }}>Importar Planilha<input hidden type="file" accept=".xlsx" disabled={busy} onChange={async (e) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        await importWorkbook(file);
+      }} /></label>} />
+
+      <Panel title="Ações de versão">
+        <div className="filter-row">
+          <input className="input" placeholder="versionId" value={versionId} disabled={busy} onChange={(e) => setVersionId(e.target.value)} />
+          <button className="btn primary" disabled={busy || !versionId.trim()} onClick={() => runVersionAction('publish')}>Publicar</button>
+          <button className="btn" disabled={busy || !versionId.trim()} onClick={() => runVersionAction('rollback')}>Rollback</button>
+          {busy ? <LoadingState text="Processando operação..." /> : null}
+        </div>
+        {message ? <div className="empty-state">{message}</div> : null}
+      </Panel>
+
+      <Panel title="Tabelas Cadastradas">
+        <div className="table-wrap">
+          <table>
+            <thead><tr><th>Nome</th><th>Transportadora</th><th>Versão</th><th>Status</th><th>Data Upload</th><th>Ações</th></tr></thead>
+            <tbody>
+              {mockRows.map((r) => (
+                <tr key={r.name}>
+                  <td>{r.name}</td><td>{r.carrier}</td><td>{r.version}</td>
+                  <td><StatusBadge status={r.status} /></td>
+                  <td>{r.date}</td>
+                  <td><div className="row-actions"><button className="btn ghost">Ver</button><button className="btn">Rollback</button></div></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Panel>
+
+      {previewRows ? <Panel title="Preview da importação"><pre className="mono" style={{ margin: 0 }}>{JSON.stringify(previewRows, null, 2)}</pre></Panel> : null}
+      {out ? <Panel title="Resposta técnica"><pre className="mono" style={{ margin: 0 }}>{JSON.stringify(out, null, 2)}</pre></Panel> : null}
     </div>
   );
 }

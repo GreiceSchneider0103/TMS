@@ -5,6 +5,9 @@ import { logAudit } from '../services/audit.js';
 
 export function registerTrackingRoutes(app) {
   app.post('/tracking/webhook/:provider', requireAnyRole(['operador_logistico', 'analista_integracao'], async ({ ctx, params, body }) => {
+    if (!body.shipmentId) throw new Error('shipmentId is required');
+    if (!body.status) throw new Error('status is required');
+    if (typeof body.status !== 'string') throw new Error('status must be string');
     const eventKey = String(body.eventId || body.id || `${body.shipmentId}-${body.status}-${body.occurredAt}`);
 
     const log = await query(

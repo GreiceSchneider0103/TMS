@@ -15,10 +15,13 @@ export function normalizeRole(role) {
 }
 
 export function authorizeRole(ctxRole, allowedRoles) {
+  if (!Array.isArray(allowedRoles) || allowedRoles.length === 0) {
+    throw new HttpError(500, 'RBAC misconfiguration: allowed roles required');
+  }
   const normalized = normalizeRole(ctxRole);
   const allowed = new Set(allowedRoles.map(normalizeRole));
   if (normalized !== 'admin' && !allowed.has(normalized)) {
-    throw new HttpError(403, `Forbidden for role ${normalized}`);
+    throw new HttpError(403, 'Forbidden');
   }
   return normalized;
 }

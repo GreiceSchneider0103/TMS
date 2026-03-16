@@ -1,58 +1,149 @@
-# Deploy — Supabase + Render
+# Deploy Render + Supabase (Homologação Operacional)
 
-## Serviços
-1. `tms-api` (Node Web Service)
-2. `tms-workers` (Node Background Worker — Tiny status sync)
-3. `tms-workers-tracking` (Node Background Worker — tracking polling contínuo)
-4. `tms-web` (Static Site)
+## Arquitetura final no Render
 
-## Variáveis obrigatórias
+### Serviço 1 — API
+- **Type:** Web Service
+- **Name:** `tms-api`
+- **Root Directory:** `apps/api`
+- **Build Command:** `npm ci`
+- **Start Command:** `npm run dev`
+- **Health Check Path:** `/health`
+
+### Serviço 2 — Worker Tiny Sync
+- **Type:** Background Worker
+- **Name:** `tms-worker-tiny-sync`
+- **Root Directory:** `workers`
+- **Build Command:** `npm ci`
+- **Start Command:** `npm run start`
+- **Health Check:** não se aplica
+
+### Serviço 3 — Worker Tracking Polling
+- **Type:** Background Worker
+- **Name:** `tms-worker-tracking`
+- **Root Directory:** `workers`
+- **Build Command:** `npm ci`
+- **Start Command:** `npm run start:tracking`
+- **Health Check:** não se aplica
+
+### Serviço 4 — Frontend Next.js
+- **Type:** Web Service (não Static Site)
+- **Name:** `tms-web`
+- **Root Directory:** `apps/web`
+- **Build Command:** `npm ci && npm run build`
+- **Start Command:** `npm run start`
+- **Health Check Path:** `/login`
+
+> Observação: como o frontend usa middleware + rotas API (`/api/session/*`), deve rodar como **Web Service Node**.
+
+---
+
+## Variáveis de ambiente por serviço
+
+### API (`tms-api`)
+Obrigatórias:
 - `DATABASE_URL`
 - `TINY_BASE_URL`
 - `TINY_API_TOKEN`
-- `PORT` (API)
-- `INTERNAL_CONTEXT_TOKEN` (somente para integração interna controlada)
-- `CORS_ALLOWED_ORIGINS` (opcional, CSV; ex.: `https://my-ui.app.github.dev,https://*.app.github.dev`)
-- `CORS_ALLOWED_HEADERS` (opcional, CSV; default: `content-type,x-api-key,x-correlation-id`)
+- `INTERNAL_CONTEXT_TOKEN`
+- `CORS_ALLOWED_ORIGINS` (incluir URL do frontend Render)
 
-## Variáveis recomendadas para worker contínuo
-- `WORKER_NAME` (ex.: `tiny-sync-worker-prod-1` / `tracking-polling-worker-prod-1`)
-- `WORKER_POLL_INTERVAL_MS` (default `5000` para sync e `10000` para tracking)
-- `WORKER_TINY_SYNC_BATCH_SIZE` (default `50`)
-- `WORKER_TRACKING_BATCH_SIZE` (default `100`)
-- `WORKER_IDLE_BACKOFF_MS` (default `2000`)
-- `WORKER_FAILURE_BACKOFF_MS` (default `7000`)
-- `TINY_TIMEOUT_MS` (default `15000`)
-- `TINY_TRACKING_EVENTS_PATH` (default `/shipments/{trackingCode}/events`)
+Recomendadas:
+- `PORT=10000`
+- `CORS_ALLOWED_HEADERS=content-type,x-api-key,x-correlation-id,x-request-id,x-idempotency-key`
+- `REQUEST_BODY_LIMIT_BYTES=1048576`
+- `RATE_LIMIT_AUTH_MAX=5`
+- `RATE_LIMIT_AUTH_WINDOW_MS=60000`
+- `RATE_LIMIT_WEBHOOK_MAX=60`
+- `RATE_LIMIT_WEBHOOK_WINDOW_MS=60000`
+- `RATE_LIMIT_API_MAX=120`
+- `RATE_LIMIT_API_WINDOW_MS=60000`
+- `SESSION_COOKIE_NAME=tms_api_session`
 
-## Ordem de bootstrap
-1. Aplicar `supabase/migrations/001_init.sql`.
-2. Aplicar `supabase/migrations/002_operational_gap_closure.sql`.
-3. Aplicar `supabase/migrations/003_hardening_security_idempotency.sql`.
-4. Aplicar `supabase/migrations/004_v1_operational_crud.sql`.
-5. Aplicar `supabase/migrations/005_homologation_fixes.sql`.
-6. Aplicar seed opcional `supabase/seeds/001_seed.sql`.
-7. Criar `app.api_credentials` com hash SHA256 do token de integração.
-8. Deploy API e workers com mesmas env vars de banco e Tiny.
+### Frontend (`tms-web`)
+Obrigatórias:
+- `NEXT_PUBLIC_API_BASE_URL` (ex.: `https://tms-api.onrender.com`)
 
-## Estratégia mínima confiável para workers reais
-- Worker Tiny status sync contínuo: `npm run start`.
-- Worker tracking polling contínuo: `npm run start:tracking`.
-- Execução pontual/controlada (sync): `npm run start:once`.
-- Múltiplas réplicas podem rodar em paralelo com segurança por `for update skip locked` no picking de jobs de sync.
-- Encerramento gracioso em ambos workers: captura `SIGTERM`/`SIGINT`, conclui ciclo corrente e para sem aceitar novos ciclos.
+Recomendadas:
+- `SESSION_COOKIE_NAME=tms_api_session`
+- `SESSION_MAX_AGE_SECONDS=28800`
+- `SESSION_COOKIE_SECURE=true`
+- `SESSION_COOKIE_DOMAIN` (opcional; só usar se quiser compartilhar cookie entre subdomínios)
 
-## Monitoramento mínimo recomendado
-- Alertar se não houver log `tiny_sync_batch_done` por janela esperada (ex.: 2 min).
-- Alertar crescimento de `tiny_sync_dead_letter`.
-- Alertar `worker_cycle_error` consecutivos acima de limiar (ex.: 5).
-- Alertar crescimento de `tracking_polling_shipment_error`.
-- Alertar ausência de `tracking_polling_cycle_done` em janela esperada.
+### Worker Tiny (`tms-worker-tiny-sync`)
+Obrigatórias:
+- `DATABASE_URL`
+- `TINY_BASE_URL`
+- `TINY_API_TOKEN`
 
-## Smoke test de homolog
-- API: `GET /health`
-- Pedidos: `POST /orders/import/tiny`
-- Cotação: `POST /quotes/manual`
-- Embarque: `POST /shipments`
-- Tracking webhook: `POST /tracking/webhook/:provider`
-- Logs operacionais: `GET /logs/sync-jobs`
+Recomendadas:
+- `WORKER_NAME=tiny-sync-worker-render`
+- `WORKER_POLL_INTERVAL_MS=5000`
+- `WORKER_TINY_SYNC_BATCH_SIZE=50`
+- `WORKER_IDLE_BACKOFF_MS=2000`
+- `WORKER_FAILURE_BACKOFF_MS=7000`
+- `TINY_TIMEOUT_MS=15000`
+
+### Worker Tracking (`tms-worker-tracking`)
+Obrigatórias:
+- `DATABASE_URL`
+- `TINY_BASE_URL`
+- `TINY_API_TOKEN`
+
+Recomendadas:
+- `WORKER_NAME=tracking-polling-worker-render`
+- `WORKER_POLL_INTERVAL_MS=10000`
+- `WORKER_TRACKING_BATCH_SIZE=100`
+- `WORKER_IDLE_BACKOFF_MS=2000`
+- `WORKER_FAILURE_BACKOFF_MS=7000`
+- `TINY_TIMEOUT_MS=15000`
+- `TINY_TRACKING_EVENTS_PATH=/shipments/{trackingCode}/events`
+
+---
+
+## Checklist exato para subir os 4 serviços
+
+1. **Aplicar migrations no Supabase** em ordem (`001` até `006`) e seed se necessário.
+2. **Criar/validar API key** em `app.api_credentials`.
+3. **Subir pelo `render.yaml`** (Blueprint) ou criar serviços manualmente com os comandos acima.
+4. Configurar envs:
+   - API primeiro,
+   - depois frontend com `NEXT_PUBLIC_API_BASE_URL` da API,
+   - depois workers com `DATABASE_URL` + Tiny.
+5. Confirmar health:
+   - API: `GET /health` = `{"ok":true}`
+   - Frontend: `GET /login` = 200
+6. Rodar smoke funcional mínimo:
+   - login,
+   - dashboard,
+   - orders list/detail,
+   - quotes,
+   - shipments,
+   - tracking,
+   - freight import/publish/rollback,
+   - logs.
+7. Confirmar CORS:
+   - `CORS_ALLOWED_ORIGINS` inclui URL real do frontend Render.
+
+---
+
+## Matriz de readiness (homolog)
+
+| Item | Status | Observação |
+|---|---|---|
+| API | Pronto | Com `/health`, envs e rate limit configuráveis. |
+| Frontend | Pronto | Next.js server-side; exige Web Service e `NEXT_PUBLIC_API_BASE_URL`. |
+| Worker Tiny | Pronto | Processo contínuo via `npm run start`. |
+| Worker Tracking | Pronto | Processo contínuo via `npm run start:tracking`. |
+| Banco (Supabase) | Precisa ajuste | Aplicar migrations `001..006` no ambiente alvo. |
+| Sessão/Cookie | Precisa ajuste | Validar `SESSION_COOKIE_SECURE=true` + domínio conforme URL final. |
+| CORS | Precisa ajuste | Definir `CORS_ALLOWED_ORIGINS` com URL exata do frontend Render. |
+| Logs/Monitoramento | Risco moderado | Recomendado configurar alertas no Render + dashboard de erros. |
+
+---
+
+## Bloqueadores objetivos de deploy
+- `NEXT_PUBLIC_API_BASE_URL` ausente/errada no frontend.
+- `CORS_ALLOWED_ORIGINS` sem URL do frontend.
+- `DATABASE_URL` inválida nos workers/API.
+- Migrations não aplicadas no Supabase.
