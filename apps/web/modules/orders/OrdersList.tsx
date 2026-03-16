@@ -7,6 +7,8 @@ import { PageHeader } from '@/components/ui/PageHeader';
 import { Panel } from '@/components/ui/Panel';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { EmptyState } from '@/components/ui/EmptyState';
+import { LoadingState } from '@/components/ui/LoadingState';
+import { ErrorState } from '@/components/ui/ErrorState';
 
 export function OrdersList() {
   const [status, setStatus] = useState('');
@@ -45,7 +47,7 @@ export function OrdersList() {
           <input className="input" placeholder="Transportadora" value={carrier} onChange={(e) => setCarrier(e.target.value)} />
         </div>
 
-        {loading ? <p>Carregando pedidos...</p> : error ? <p className="text-error">{error}</p> : items.length === 0 ? <EmptyState /> : (
+        {loading ? <LoadingState text="Carregando pedidos..." /> : error ? <ErrorState text={error} /> : items.length === 0 ? <EmptyState /> : (
           <div className="table-wrap">
             <table>
               <thead>

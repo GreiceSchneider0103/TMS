@@ -4,6 +4,7 @@ import { api } from '@/services/api';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Panel } from '@/components/ui/Panel';
 import { StatusBadge } from '@/components/ui/StatusBadge';
+import { LoadingState } from '@/components/ui/LoadingState';
 
 const mockRows = [
   { name: 'Tabela Correios 2026', carrier: 'Correios', version: 'v3.2', status: 'Publicada', date: '01/03/2026' },
@@ -61,6 +62,8 @@ export function FreightManager() {
     }
   }
 
+  const previewRows = out?.preview?.rows || out?.version?.stats || null;
+
   return (
     <div className="grid">
       <PageHeader title="Tabelas de Frete" subtitle="Gerenciar tabelas de preços e prazos" actions={<label className="btn primary" style={{ display: 'inline-flex' }}>Importar Planilha<input hidden type="file" accept=".xlsx" disabled={busy} onChange={async (e) => {
@@ -74,8 +77,9 @@ export function FreightManager() {
           <input className="input" placeholder="versionId" value={versionId} disabled={busy} onChange={(e) => setVersionId(e.target.value)} />
           <button className="btn primary" disabled={busy || !versionId.trim()} onClick={() => runVersionAction('publish')}>Publicar</button>
           <button className="btn" disabled={busy || !versionId.trim()} onClick={() => runVersionAction('rollback')}>Rollback</button>
-          {message ? <span style={{ color: '#9fafd4' }}>{message}</span> : null}
+          {busy ? <LoadingState text="Processando operação..." /> : null}
         </div>
+        {message ? <div className="empty-state">{message}</div> : null}
       </Panel>
 
       <Panel title="Tabelas Cadastradas">
@@ -96,6 +100,7 @@ export function FreightManager() {
         </div>
       </Panel>
 
+      {previewRows ? <Panel title="Preview da importação"><pre className="mono" style={{ margin: 0 }}>{JSON.stringify(previewRows, null, 2)}</pre></Panel> : null}
       {out ? <Panel title="Resposta técnica"><pre className="mono" style={{ margin: 0 }}>{JSON.stringify(out, null, 2)}</pre></Panel> : null}
     </div>
   );

@@ -6,6 +6,8 @@ import { StatCard } from '@/components/ui/StatCard';
 import { Panel } from '@/components/ui/Panel';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { EmptyState } from '@/components/ui/EmptyState';
+import { LoadingState } from '@/components/ui/LoadingState';
+import { ErrorState } from '@/components/ui/ErrorState';
 
 export default function DashboardPage() {
   const summary = useApi(() => api('/dashboard/summary'), []);
@@ -26,7 +28,7 @@ export default function DashboardPage() {
 
       <div className="two-col">
         <Panel title="Resumo operacional" subtitle="Indicadores do período atual">
-          {summary.loading ? <p>Carregando resumo...</p> : summary.error ? <p className="text-error">{summary.error}</p> : (
+          {summary.loading ? <LoadingState text="Carregando resumo operacional..." /> : summary.error ? <ErrorState text={summary.error} /> : (
             <div className="detail-grid">
               {Object.entries((summary.data as any) || {}).map(([key, value]) => (
                 <div className="detail-item" key={key}>
@@ -39,7 +41,7 @@ export default function DashboardPage() {
         </Panel>
 
         <Panel title="Jobs recentes" subtitle="Sincronização e integrações">
-          {sync.loading ? <p>Carregando jobs...</p> : sync.error ? <p className="text-error">{sync.error}</p> : items.length === 0 ? <EmptyState text="Sem jobs recentes." /> : (
+          {sync.loading ? <LoadingState text="Carregando jobs..." /> : sync.error ? <ErrorState text={sync.error} /> : items.length === 0 ? <EmptyState text="Sem jobs recentes." /> : (
             <div className="table-wrap">
               <table>
                 <thead><tr><th>Tipo</th><th>Status</th><th>Atualizado</th></tr></thead>

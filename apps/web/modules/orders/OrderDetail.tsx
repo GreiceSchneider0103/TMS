@@ -1,23 +1,26 @@
 'use client';
+import Link from 'next/link';
 import { api } from '@/services/api';
 import { useApi } from '@/hooks/useApi';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Panel } from '@/components/ui/Panel';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { EmptyState } from '@/components/ui/EmptyState';
+import { LoadingState } from '@/components/ui/LoadingState';
+import { ErrorState } from '@/components/ui/ErrorState';
 
 export function OrderDetail({ id }: { id: string }) {
   const { data, loading, error } = useApi(() => api(`/orders/${id}`), [id]);
 
-  if (loading) return <p>Carregando pedido...</p>;
-  if (error) return <p className="text-error">{error}</p>;
+  if (loading) return <LoadingState text="Carregando pedido..." />;
+  if (error) return <ErrorState text={error} />;
 
   const order = (data as any) || {};
   const items = order.items || [];
 
   return (
     <div className="grid">
-      <PageHeader title={`Pedido #${order.order_number || id.slice(0, 8)}`} subtitle="Detalhamento operacional do pedido" />
+      <PageHeader title={`Pedido #${order.order_number || id.slice(0, 8)}`} subtitle="Detalhamento operacional do pedido" actions={<Link className="btn" href="/orders">Voltar</Link>} />
 
       <Panel title="Dados gerais">
         <div className="detail-grid">
@@ -30,7 +33,7 @@ export function OrderDetail({ id }: { id: string }) {
         </div>
       </Panel>
 
-      <Panel title="Itens do pedido">
+      <Panel title="Itens do pedido" subtitle={`Total de itens: ${items.length}`}>
         {items.length === 0 ? <EmptyState text="Pedido sem itens vinculados." /> : (
           <div className="table-wrap">
             <table>

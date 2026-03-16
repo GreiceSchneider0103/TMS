@@ -13,11 +13,15 @@ const ACTION_OPTIONS = [
   'Aplicar mínimo', 'Aplicar máximo', 'Ajustar margem operacional'
 ];
 
+const EMPTY_RULE: ShippingRule = {
+  id: '', name: '', description: '', priority: 10, active: true, validFrom: '', validTo: '', channel: '', carrier: '', service: '', region: '', actionType: ACTION_OPTIONS[0], value: '', updatedAt: '', conditions: {}
+};
+
 export function ShippingRulesPage() {
   const [rules, setRules] = useState<ShippingRule[]>(MOCK_SHIPPING_RULES);
   const [status, setStatus] = useState('all');
   const [type, setType] = useState('all');
-  const [open, setOpen] = useState(false);
+  const [modalRule, setModalRule] = useState<ShippingRule | null>(null);
 
   const filtered = useMemo(() => rules.filter((r) => {
     if (status !== 'all' && String(r.active) !== status) return false;
@@ -27,7 +31,7 @@ export function ShippingRulesPage() {
 
   return (
     <div className="grid">
-      <PageHeader title="Regras de Frete" subtitle="Configure descontos, adicionais e condições especiais" actions={<button className="btn primary" onClick={() => setOpen(true)}>+ Nova Regra</button>} />
+      <PageHeader title="Regras de Frete" subtitle="Configure descontos, adicionais e condições especiais" actions={<button className="btn primary" onClick={() => setModalRule(EMPTY_RULE)}>+ Nova Regra</button>} />
 
       <div className="kpi-grid">
         <StatCard title="Total de Regras" value={rules.length} />
@@ -66,7 +70,13 @@ export function ShippingRulesPage() {
                   <td>{r.value || '-'}</td>
                   <td><StatusBadge status={r.active ? 'Ativa' : 'Inativa'} /></td>
                   <td>{r.updatedAt}</td>
-                  <td><div className="row-actions"><button className="btn ghost">✎</button><button className="btn ghost">⧉</button><button className="btn danger">🗑</button></div></td>
+                  <td>
+                    <div className="row-actions">
+                      <button className="btn ghost" onClick={() => setModalRule(r)}>✎</button>
+                      <button className="btn ghost" onClick={() => setModalRule({ ...r, id: '', name: `${r.name} (cópia)` })}>⧉</button>
+                      <button className="btn danger" onClick={() => setRules((prev) => prev.filter((x) => x.id !== r.id))}>🗑</button>
+                    </div>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -74,39 +84,25 @@ export function ShippingRulesPage() {
         </div>
       </Panel>
 
-      {open ? <RuleModal onClose={() => setOpen(false)} onSave={(payload) => {
-        setRules((prev) => [{ ...payload, id: String(Date.now()), updatedAt: new Date().toLocaleString() }, ...prev]);
-        setOpen(false);
+      {modalRule ? <RuleModal rule={modalRule} onClose={() => setModalRule(null)} onSave={(payload) => {
+        setRules((prev) => {
+          if (!payload.id) return [{ ...payload, id: String(Date.now()), updatedAt: new Date().toLocaleString() }, ...prev];
+          return prev.map((item) => item.id === payload.id ? { ...payload, updatedAt: new Date().toLocaleString() } : item);
+        });
+        setModalRule(null);
       }} /> : null}
     </div>
   );
 }
 
-function RuleModal({ onClose, onSave }: { onClose: () => void; onSave: (rule: ShippingRule) => void }) {
-  const [form, setForm] = useState<ShippingRule>({
-    id: '',
-    name: '',
-    description: '',
-    priority: 10,
-    active: true,
-    validFrom: '',
-    validTo: '',
-    channel: '',
-    carrier: '',
-    service: '',
-    region: '',
-    actionType: ACTION_OPTIONS[0],
-    value: '',
-    updatedAt: '',
-    conditions: {}
-  });
-
+function RuleModal({ rule, onClose, onSave }: { rule: ShippingRule; onClose: () => void; onSave: (rule: ShippingRule) => void }) {
+  const [form, setForm] = useState<ShippingRule>(rule);
   const set = (k: keyof ShippingRule, v: any) => setForm((p) => ({ ...p, [k]: v }));
 
   return (
     <div className="modal-backdrop">
       <div className="modal">
-        <div className="panel-head"><h3>Nova Regra de Frete</h3><button className="btn ghost" onClick={onClose}>Fechar</button></div>
+        <div className="panel-head"><h3>{rule.id ? 'Editar Regra de Frete' : 'Nova Regra de Frete'}</h3><button className="btn ghost" onClick={onClose}>Fechar</button></div>
         <div className="panel-body grid">
           <Panel title="Informações gerais">
             <div className="form-grid">

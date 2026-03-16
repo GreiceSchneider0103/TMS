@@ -5,6 +5,8 @@ import { api } from '@/services/api';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Panel } from '@/components/ui/Panel';
 import { StatusBadge } from '@/components/ui/StatusBadge';
+import { LoadingState } from '@/components/ui/LoadingState';
+import { ErrorState } from '@/components/ui/ErrorState';
 
 export function TrackingPanel() {
   const shipments = useApi(() => api('/shipments'), []);
@@ -19,19 +21,21 @@ export function TrackingPanel() {
       <PageHeader title="Tracking" subtitle="Acompanhe status de entrega dos pedidos" />
 
       <Panel title="Rastreamento">
-        <div className="filter-row">
-          <select className="select" value={selected} onChange={(e) => setSelected(e.target.value)}>
-            <option value="">Selecione um embarque...</option>
-            {shipmentItems.map((s: any) => (
-              <option key={s.id} value={s.id}>{s.tracking_code || s.id.slice(0, 8)} - {s.status}</option>
-            ))}
-          </select>
-          <button className="btn primary" onClick={() => setSelected(selected)}>Rastrear</button>
-        </div>
+        {shipments.loading ? <LoadingState text="Carregando embarques rastreáveis..." /> : shipments.error ? <ErrorState text={shipments.error} /> : (
+          <div className="filter-row">
+            <select className="select" value={selected} onChange={(e) => setSelected(e.target.value)}>
+              <option value="">Selecione um embarque...</option>
+              {shipmentItems.map((s: any) => (
+                <option key={s.id} value={s.id}>{s.tracking_code || s.id.slice(0, 8)} - {s.status}</option>
+              ))}
+            </select>
+            <button className="btn primary" disabled={!selected}>Rastrear</button>
+          </div>
+        )}
       </Panel>
 
       <Panel title="Timeline de eventos">
-        {!selected ? <div className="empty-state">Selecione um embarque para visualizar eventos.</div> : timeline.loading ? <p>Carregando timeline...</p> : timeline.error ? <p className="text-error">{timeline.error}</p> : (
+        {!selected ? <div className="empty-state">Selecione um embarque para visualizar eventos.</div> : timeline.loading ? <LoadingState text="Carregando timeline..." /> : timeline.error ? <ErrorState text={timeline.error} /> : (
           <div className="table-wrap">
             <table>
               <thead><tr><th>Data/Hora</th><th>Status</th><th>Detalhe</th></tr></thead>

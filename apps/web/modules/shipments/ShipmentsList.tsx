@@ -6,6 +6,8 @@ import { PageHeader } from '@/components/ui/PageHeader';
 import { Panel } from '@/components/ui/Panel';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { EmptyState } from '@/components/ui/EmptyState';
+import { LoadingState } from '@/components/ui/LoadingState';
+import { ErrorState } from '@/components/ui/ErrorState';
 
 export function ShipmentsList() {
   const { data, loading, error } = useApi(() => api('/shipments'), []);
@@ -15,7 +17,7 @@ export function ShipmentsList() {
     <div className="grid">
       <PageHeader title="Embarques" subtitle="Controle de envios e despachos" actions={<button className="btn primary">Criar Embarque</button>} />
       <Panel title="Lista de Embarques" right={<button className="btn">Sincronizar Tudo</button>}>
-        {loading ? <p>Carregando embarques...</p> : error ? <p className="text-error">{error}</p> : items.length === 0 ? <EmptyState /> : (
+        {loading ? <LoadingState text="Carregando embarques..." /> : error ? <ErrorState text={error} /> : items.length === 0 ? <EmptyState /> : (
           <div className="table-wrap">
             <table>
               <thead><tr><th>Shipment ID</th><th>Pedido</th><th>Transportadora</th><th>Código Rastreio</th><th>Status</th><th>Data Envio</th><th>Ações</th></tr></thead>

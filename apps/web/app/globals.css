@@ -97,3 +97,10 @@ td { font-size: 15px; }
   .kpi-grid, .two-col, .form-grid, .detail-grid { grid-template-columns: 1fr; }
   .topbar { padding: 0 10px; }
 }
+
+
+.sidebar { overflow: auto; }
+.panel-body .empty-state { margin: 0; }
+.row-actions .btn { padding: 6px 10px; }
+.table-wrap::-webkit-scrollbar { height: 8px; }
+.table-wrap::-webkit-scrollbar-thumb { background: #223867; border-radius: 999px; }
