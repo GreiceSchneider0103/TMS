@@ -47,7 +47,9 @@ export function router() {
           }));
         }
 
-        res.writeHead(status, { 'content-type': 'application/json' });
+        const headers = { 'content-type': 'application/json' };
+        if (error?.retryAfter) headers['retry-after'] = String(error.retryAfter);
+        res.writeHead(status, headers);
         res.end(JSON.stringify({ error: message, ...(code ? { code } : {}) }));
       }
       return true;
@@ -65,8 +67,14 @@ function compile(path) {
 }
 
 async function readBody(req) {
+  const maxBytes = Number(process.env.REQUEST_BODY_LIMIT_BYTES || 1024 * 1024);
   const chunks = [];
-  for await (const chunk of req) chunks.push(chunk);
+  let totalBytes = 0;
+  for await (const chunk of req) {
+    totalBytes += chunk.length;
+    if (totalBytes > maxBytes) throw new HttpError(413, 'Payload too large');
+    chunks.push(chunk);
+  }
   if (!chunks.length) return {};
   const text = Buffer.concat(chunks).toString('utf8');
   if (!text) return {};
