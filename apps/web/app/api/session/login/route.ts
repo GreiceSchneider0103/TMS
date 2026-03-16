@@ -27,20 +27,26 @@ export async function POST(req: NextRequest) {
   const res = NextResponse.json({ ok: true });
   const maxAge = Number(process.env.SESSION_MAX_AGE_SECONDS || 28_800);
   const cookieName = process.env.SESSION_COOKIE_NAME || 'tms_api_session';
+  const cookieDomain = process.env.SESSION_COOKIE_DOMAIN || undefined;
+
+  const forceSecure = String(process.env.SESSION_COOKIE_SECURE || '').toLowerCase();
+  const secure = forceSecure ? forceSecure === 'true' : process.env.NODE_ENV === 'production';
 
   res.cookies.set(cookieName, apiKey, {
     httpOnly: true,
-    secure: true,
+    secure,
     sameSite: 'strict',
     maxAge,
-    path: '/'
+    path: '/',
+    ...(cookieDomain ? { domain: cookieDomain } : {})
   });
   res.cookies.set('tms_session', '1', {
     httpOnly: true,
-    secure: true,
+    secure,
     sameSite: 'strict',
     maxAge,
-    path: '/'
+    path: '/',
+    ...(cookieDomain ? { domain: cookieDomain } : {})
   });
 
   return res;

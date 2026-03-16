@@ -8,11 +8,16 @@ function correlationId() {
 }
 
 export async function api<T = AnyObj>(path: string, init?: RequestInit): Promise<T> {
+  const method = String(init?.method || 'GET').toUpperCase();
+  const mutating = method === 'POST' || method === 'PATCH' || method === 'PUT' || method === 'DELETE';
+  const idem = mutating ? correlationId() : null;
+
   const res = await fetch(`${API_BASE}${path}`, {
     ...init,
     headers: {
       'content-type': 'application/json',
       'x-correlation-id': correlationId(),
+      ...(idem ? { 'x-idempotency-key': idem } : {}),
       ...(init?.headers || {})
     },
     cache: 'no-store',

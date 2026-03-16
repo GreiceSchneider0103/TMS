@@ -45,8 +45,13 @@ function getClientIp(req) {
 }
 
 function getApiKeyFingerprint(req) {
-  const apiKey = req.headers['x-api-key'];
-  if (!apiKey) return null;
-  const value = String(apiKey);
-  return value.slice(0, 6);
+  const fromHeader = req.headers['x-api-key'];
+  if (fromHeader) return String(fromHeader).slice(0, 6);
+
+  const cookieName = process.env.SESSION_COOKIE_NAME || 'tms_api_session';
+  const cookieHeader = String(req.headers.cookie || '');
+  const raw = cookieHeader.split(';').map((x) => x.trim()).find((x) => x.startsWith(`${cookieName}=`));
+  if (!raw) return null;
+  const token = decodeURIComponent(raw.slice(cookieName.length + 1));
+  return token ? token.slice(0, 6) : null;
 }
