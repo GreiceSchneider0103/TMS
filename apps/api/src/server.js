@@ -16,6 +16,10 @@ import { registerProductLogisticsRoutes } from './routes/productLogistics.js';
 import { registerRecipientRoutes } from './routes/recipients.js';
 import { registerLogRoutes } from './routes/logs.js';
 import { applyCors } from './utils/cors.js';
+import { applyRateLimit } from './utils/rateLimit.js';
+import { attachRequestContext, logRequest } from './utils/requestContext.js';
+import { registerAuthRoutes } from './routes/auth.js';
+import { enforceAbuseProtection } from './utils/abuseProtection.js';
 
 const app = router();
 registerOrderRoutes(app);
@@ -32,10 +36,12 @@ registerProductRoutes(app);
 registerProductLogisticsRoutes(app);
 registerRecipientRoutes(app);
 registerLogRoutes(app);
+registerAuthRoutes(app);
 
 app.get('/health', async () => ({ ok: true }));
 
 const server = http.createServer(async (req, res) => {
+  attachRequestContext(req, res);
   const cors = applyCors(req, res);
 
   if (req.method === 'OPTIONS') {
@@ -49,12 +55,26 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  try {
+    enforceAbuseProtection(req);
+    applyRateLimit(req);
+  } catch (error) {
+    const status = Number.isInteger(error?.status) ? error.status : 429;
+    const headers = { 'content-type': 'application/json' };
+    if (error?.retryAfter) headers['retry-after'] = String(error.retryAfter);
+    res.writeHead(status, headers);
+    res.end(JSON.stringify({ error: error.message || 'Too many requests', code: error.code || 'RATE_LIMITED' }));
+    logRequest(req, status, { limited: true });
+    return;
+  }
+
   await runWithDbContext(null, async () => {
     const handled = await app.handle(req, res);
     if (!handled) {
       res.writeHead(404, { 'content-type': 'application/json' });
       res.end(JSON.stringify({ error: 'Not found' }));
     }
+    logRequest(req, res.statusCode || (handled ? 200 : 404));
   });
 });
 

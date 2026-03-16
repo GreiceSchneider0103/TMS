@@ -27,10 +27,7 @@ export function Sidebar() {
       ))}
       <button
         onClick={() => {
-          document.cookie = 'tms_session=; Max-Age=0; path=/';
-          localStorage.removeItem('tms_api_key');
-          localStorage.removeItem('tms_email');
-          router.push('/login');
+          fetch('/api/session/logout', { method: 'POST' }).finally(() => router.push('/login'));
         }}
       >
         Sair
