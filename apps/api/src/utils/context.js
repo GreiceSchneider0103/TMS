@@ -9,7 +9,7 @@ export async function resolveContext(req) {
     return req.tmsContext;
   }
 
-  const correlationId = String(req.headers['x-correlation-id'] || crypto.randomUUID());
+  const correlationId = String(req.requestContext?.correlationId || req.headers['x-correlation-id'] || crypto.randomUUID());
   const userId = String(req.headers['x-user-id'] || '00000000-0000-0000-0000-000000000000');
 
   const apiKey = parseApiKey(req);
@@ -53,8 +53,8 @@ export async function resolveContext(req) {
 export function requireAnyRole(allowedRoles, handler) {
   return async (ctxInput) => {
     const ctx = await resolveContext(ctxInput.req);
-    authorizeRole(ctx.role, allowedRoles);
-    return handler({ ...ctxInput, ctx });
+    const resolvedRole = authorizeRole(ctx.role, allowedRoles);
+    return handler({ ...ctxInput, ctx: { ...ctx, role: resolvedRole } });
   };
 }
 
@@ -63,9 +63,17 @@ export const requireRole = requireAnyRole;
 function parseApiKey(req) {
   const fromHeader = req.headers['x-api-key'];
   if (fromHeader) return String(fromHeader);
+  const fromCookie = parseCookie(req.headers.cookie || '', process.env.SESSION_COOKIE_NAME || 'tms_api_session');
+  if (fromCookie) return fromCookie;
   const auth = req.headers.authorization;
   if (!auth) return null;
   const [kind, token] = String(auth).split(' ');
   if (kind?.toLowerCase() === 'bearer' && token) return token;
   return null;
+}
+
+function parseCookie(cookieHeader, key) {
+  const item = String(cookieHeader).split(';').map((x) => x.trim()).find((x) => x.startsWith(`${key}=`));
+  if (!item) return null;
+  return decodeURIComponent(item.slice(key.length + 1));
 }
