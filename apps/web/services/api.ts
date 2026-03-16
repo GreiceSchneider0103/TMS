@@ -2,30 +2,26 @@ import { AnyObj } from './types';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:3001';
 
-export function getSession() {
-  if (typeof window === 'undefined') return { apiKey: '', email: '' };
-  return {
-    apiKey: localStorage.getItem('tms_api_key') || '',
-    email: localStorage.getItem('tms_email') || ''
-  };
-}
-
 function correlationId() {
   if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) return crypto.randomUUID();
   return `cid-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
 export async function api<T = AnyObj>(path: string, init?: RequestInit): Promise<T> {
-  const { apiKey } = getSession();
+  const method = String(init?.method || 'GET').toUpperCase();
+  const mutating = method === 'POST' || method === 'PATCH' || method === 'PUT' || method === 'DELETE';
+  const idem = mutating ? correlationId() : null;
+
   const res = await fetch(`${API_BASE}${path}`, {
     ...init,
     headers: {
       'content-type': 'application/json',
-      'x-api-key': apiKey,
       'x-correlation-id': correlationId(),
+      ...(idem ? { 'x-idempotency-key': idem } : {}),
       ...(init?.headers || {})
     },
-    cache: 'no-store'
+    cache: 'no-store',
+    credentials: 'include'
   });
 
   const contentType = res.headers.get('content-type') || '';

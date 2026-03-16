@@ -1,11 +1,6 @@
 import type { ReactNode } from 'react';
-import { Sidebar } from './Sidebar';
+import { AppShell } from '@/components/layout/AppShell';
 
 export function PrivateShell({ children }: { children: ReactNode }) {
-  return (
-    <div className="layout">
-      <Sidebar />
-      <main className="content">{children}</main>
-    </div>
-  );
+  return <AppShell>{children}</AppShell>;
 }

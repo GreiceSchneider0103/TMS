@@ -68,10 +68,6 @@ export function registerShipmentRoutes(app) {
       }
 
       await client.query(
-        "update app.orders set status = case when status = 'READY_FOR_QUOTE' then 'QUOTED' else status end, updated_at = now() where account_id = $1 and id = $2",
-        [ctx.accountId, body.orderId]
-      );
-      await client.query(
         "update app.orders set status = 'DISPATCHED', updated_at = now() where account_id = $1 and id = $2",
         [ctx.accountId, body.orderId]
       );
@@ -87,10 +83,6 @@ export function registerShipmentRoutes(app) {
 async function updateOrderStatusFromShipment({ accountId, orderId }) {
   if (!orderId) return;
 
-  await query(
-    "update app.orders set status = case when status = 'READY_FOR_QUOTE' then 'QUOTED' else status end, updated_at = now() where account_id = $1 and id = $2",
-    [accountId, orderId]
-  );
   await query(
     "update app.orders set status = 'DISPATCHED', updated_at = now() where account_id = $1 and id = $2",
     [accountId, orderId]
