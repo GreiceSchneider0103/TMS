@@ -12,14 +12,44 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'email, password and apiKey are required' }, { status: 400 });
   }
 
-  const upstream = await fetch(`${API_BASE}/auth/session`, {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      'x-idempotency-key': `login-${email}`
-    },
-    body: JSON.stringify({ apiKey })
-  });
+  console.log('[login] API_BASE resolved to:', API_BASE);
+
+  let upstream: Response;
+  try {
+    upstream = await fetch(`${API_BASE}/auth/session`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-idempotency-key': `login-${email}`
+      },
+      body: JSON.stringify({ apiKey })
+    });
+  } catch (err: any) {
+    console.error('[login] fetch to upstream failed:', API_BASE, err?.message || err);
+    return NextResponse.json(
+      { error: `Falha ao conectar na API (${API_BASE}): ${err?.message || 'erro desconhecido'}` },
+      { status: 502 }
+    );
+  }
+
+  const contentType = upstream.headers.get('content-type') || '';
+  if (!contentType.includes('application/json')) {
+    const text = await upstream.text();
+    console.error(
+      '[login] upstream returned non-JSON response. status=',
+      upstream.status,
+      'content-type=',
+      contentType,
+      'body(first 300 chars)=',
+      text.slice(0, 300)
+    );
+    return NextResponse.json(
+      {
+        error: `API respondeu algo que não é JSON (status ${upstream.status}). Verifique NEXT_PUBLIC_API_BASE_URL.`
+      },
+      { status: 502 }
+    );
+  }
 
   const data = await upstream.json();
   if (!upstream.ok) return NextResponse.json(data, { status: upstream.status });
