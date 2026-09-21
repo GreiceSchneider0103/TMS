@@ -1,0 +1,23 @@
+# dependencies
+node_modules/
+apps/*/node_modules/
+workers/node_modules/
+
+# env files
+.env
+.env.*
+!.env.example
+apps/**/.env
+apps/**/.env.*
+
+# build
+.next/
+dist/
+coverage/
+
+# logs
+*.log
+npm-debug.log*
+
+# misc
+.DS_Store
