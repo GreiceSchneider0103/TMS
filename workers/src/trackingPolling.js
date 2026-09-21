@@ -10,8 +10,33 @@ const statusMap = {
   canceled: 'CANCELED'
 };
 
+// Canonical values of the app.shipments.status enum. Carrier adapters
+// (Total Express, RTE, ...) already normalize their own raw provider
+// statuses into this vocabulary, so those values must pass through
+// untouched here. Without this check, e.g. a carrier-normalized
+// "DISPATCHED" would fail to match any statusMap key (only the
+// Tiny-specific lowercase "posted" does) and silently fall back to the
+// default IN_TRANSIT below -- exactly the dispatch signal this project
+// needs to capture correctly.
+const MACRO_STATUSES = new Set([
+  'CREATED',
+  'QUOTED',
+  'DISPATCHED',
+  'IN_TRANSIT',
+  'OUT_FOR_DELIVERY',
+  'DELIVERED',
+  'EXCEPTION',
+  'RETURNED',
+  'CANCELED'
+]);
+
 export function normalizeTrackingStatus(externalStatus) {
-  return statusMap[String(externalStatus || '').toLowerCase()] || 'IN_TRANSIT';
+  const raw = String(externalStatus || '');
+  const upper = raw.toUpperCase();
+  if (MACRO_STATUSES.has(upper)) {
+    return upper;
+  }
+  return statusMap[raw.toLowerCase()] || 'IN_TRANSIT';
 }
 
 export async function persistPolledTrackingEvent({ accountId, shipmentId, externalEventId, status, payload, occurredAt, client = null }) {
@@ -28,8 +53,13 @@ export async function persistPolledTrackingEvent({ accountId, shipmentId, extern
       [accountId, shipmentId, occurredAt || new Date().toISOString(), status, macro, payload || {}, externalEventId]
     );
     if (inserted.rows[0]) {
+      // $1 is cast explicitly in both places it appears: left uncast,
+      // Postgres tries to unify the "status = $1" (app.shipment_status enum)
+      // and "$1 = 'DELIVERED'" (defaults to text) contexts and fails with
+      // "inconsistent types deduced for parameter $1" (42P08), silently
+      // aborting the status update on every event insert that reaches here.
       await conn.query(
-        `update app.shipments set status = $1, updated_at = now(), delivered_at = case when $1 = 'DELIVERED' then now() else delivered_at end
+        `update app.shipments set status = $1::app.shipment_status, updated_at = now(), delivered_at = case when $1::app.shipment_status = 'DELIVERED' then now() else delivered_at end
          where account_id = $2 and id = $3`,
         [macro, accountId, shipmentId]
       );
@@ -43,17 +73,20 @@ export async function persistPolledTrackingEvent({ accountId, shipmentId, extern
   }
 }
 
-export async function runTrackingPollingCycle(fetchUpdates, limit = 100) {
+export async function runTrackingPollingCycle(fetchUpdates, limit = 100, options = {}) {
   if (typeof fetchUpdates !== 'function') throw new Error('fetchUpdates function is required');
+  const { carrierId = null } = options;
 
   const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
   const client = await pool.connect();
   try {
+    const params = carrierId ? [limit, carrierId] : [limit];
     const shipments = await client.query(
       `select * from app.shipments
        where status in ('DISPATCHED','IN_TRANSIT','OUT_FOR_DELIVERY')
+       ${carrierId ? 'and carrier_id = $2' : ''}
        order by updated_at asc limit $1`,
-      [limit]
+      params
     );
     let processed = 0;
     let errors = 0;
@@ -81,7 +114,11 @@ export async function runTrackingPollingCycle(fetchUpdates, limit = 100) {
           tracking_code: s.tracking_code,
           error: error.message,
           code: error.code || null,
-          provider_status: error.providerStatus || null
+          provider_status: error.providerStatus || null,
+          detail: error.detail || null,
+          hint: error.hint || null,
+          position: error.position || null,
+          where: error.where || null
         }));
       }
     }

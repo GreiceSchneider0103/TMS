@@ -104,6 +104,62 @@ services:
       - key: TINY_TRACKING_EVENTS_PATH
         value: /shipments/{trackingCode}/events
 
+  - type: worker
+    name: tms-worker-tracking-total-express
+    runtime: node
+    rootDir: workers
+    plan: starter
+    buildCommand: npm ci
+    startCommand: npm run start:tracking:totalexpress
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      # DATABASE_URL is the only secret this service needs: the Total
+      # Express carrier id and API credentials are loaded at startup from
+      # app.carriers / Supabase Vault (see workers/src/carrierCredentials.js
+      # and workers/src/totalExpressTrackingMain.js), not from env vars.
+      - key: DATABASE_URL
+        sync: false
+      - key: WORKER_NAME
+        value: tracking-polling-worker-total-express-render
+      - key: WORKER_POLL_INTERVAL_MS
+        value: 30000
+      - key: WORKER_TRACKING_BATCH_SIZE
+        value: 100
+      - key: WORKER_IDLE_BACKOFF_MS
+        value: 5000
+      - key: WORKER_FAILURE_BACKOFF_MS
+        value: 10000
+
+  - type: worker
+    name: tms-worker-tracking-rte
+    runtime: node
+    rootDir: workers
+    plan: starter
+    buildCommand: npm ci
+    startCommand: npm run start:tracking:rte
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      # DATABASE_URL is the only secret this service needs: the RTE
+      # carrier id and API credentials are loaded at startup from
+      # app.carriers / Supabase Vault (see workers/src/carrierCredentials.js
+      # and workers/src/rteTrackingMain.js), not from env vars.
+      - key: DATABASE_URL
+        sync: false
+      - key: WORKER_NAME
+        value: tracking-polling-worker-rte-render
+      - key: WORKER_POLL_INTERVAL_MS
+        value: 900000
+      - key: WORKER_IDLE_BACKOFF_MS
+        value: 30000
+      - key: WORKER_FAILURE_BACKOFF_MS
+        value: 60000
+      - key: RTE_LOOKBACK_DAYS
+        value: 30
+
   - type: web
     name: tms-web
     runtime: node

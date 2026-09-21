@@ -19,6 +19,7 @@ import { applyCors } from './utils/cors.js';
 import { applyRateLimit } from './utils/rateLimit.js';
 import { attachRequestContext, logRequest } from './utils/requestContext.js';
 import { registerAuthRoutes } from './routes/auth.js';
+import { registerMarketplaceWebhookRoutes } from './routes/marketplaceWebhooks.js';
 import { enforceAbuseProtection } from './utils/abuseProtection.js';
 
 const app = router();
@@ -37,6 +38,7 @@ registerProductLogisticsRoutes(app);
 registerRecipientRoutes(app);
 registerLogRoutes(app);
 registerAuthRoutes(app);
+registerMarketplaceWebhookRoutes(app);
 
 app.get('/health', async () => ({ ok: true }));
 
