@@ -4,12 +4,15 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "check": "node --check src/importFreightTable.js && node --check src/trackingPolling.js && node --check src/retryPolicy.js && node --check src/tinySync.js && node --check src/tinyApiClient.js && node --check src/tinyTrackingClient.js && node --check src/main.js && node --check src/trackingMain.js && node --check src/carriers/totalExpress.js && node --check src/carriers/rte.js && node --check src/carrierCredentials.js && node --check src/totalExpressTrackingMain.js && node --check src/rteTrackingMain.js",
+    "check": "node --check src/importFreightTable.js && node --check src/trackingPolling.js && node --check src/retryPolicy.js && node --check src/tinySync.js && node --check src/tinyApiClient.js && node --check src/tinyTrackingClient.js && node --check src/main.js && node --check src/trackingMain.js && node --check src/carriers/totalExpress.js && node --check src/carriers/rte.js && node --check src/carrierCredentials.js && node --check src/totalExpressTrackingMain.js && node --check src/rteTrackingMain.js && node --check src/loadLocalEnv.js && node --check src/tinySyncOnce.js && node --check src/trackingOnce.js && node --check src/totalExpressTrackingOnce.js && node --check src/rteTrackingOnce.js",
     "start": "node src/main.js",
-    "start:once": "node -e \"import('./src/tinySync.js').then(async (m)=>{const r=await m.runTinySyncBatch(Number(process.env.WORKER_TINY_SYNC_BATCH_SIZE||50),{workerName:process.env.WORKER_NAME||'tiny-sync-worker-once'});console.log(JSON.stringify(r));process.exit(0)}).catch((e)=>{console.error(e);process.exit(1)})\"",
+    "start:once": "node src/tinySyncOnce.js",
     "start:tracking": "node src/trackingMain.js",
+    "start:tracking:once": "node src/trackingOnce.js",
     "start:tracking:totalexpress": "node src/totalExpressTrackingMain.js",
-    "start:tracking:rte": "node src/rteTrackingMain.js"
+    "start:tracking:totalexpress:once": "node src/totalExpressTrackingOnce.js",
+    "start:tracking:rte": "node src/rteTrackingMain.js",
+    "start:tracking:rte:once": "node src/rteTrackingOnce.js"
   },
   "dependencies": {
     "pg": "8.13.1"

@@ -3,7 +3,7 @@ services:
     name: tms-api
     runtime: node
     rootDir: apps/api
-    plan: starter
+    plan: free
     buildCommand: npm ci
     startCommand: npm run dev
     healthCheckPath: /health
@@ -42,129 +42,21 @@ services:
       - key: SESSION_COOKIE_NAME
         value: tms_api_session
 
-  - type: worker
-    name: tms-worker-tiny-sync
-    runtime: node
-    rootDir: workers
-    plan: starter
-    buildCommand: npm ci
-    startCommand: npm run start
-    autoDeploy: true
-    envVars:
-      - key: NODE_ENV
-        value: production
-      - key: DATABASE_URL
-        sync: false
-      - key: TINY_BASE_URL
-        sync: false
-      - key: TINY_API_TOKEN
-        sync: false
-      - key: WORKER_NAME
-        value: tiny-sync-worker-render
-      - key: WORKER_POLL_INTERVAL_MS
-        value: 5000
-      - key: WORKER_TINY_SYNC_BATCH_SIZE
-        value: 50
-      - key: WORKER_IDLE_BACKOFF_MS
-        value: 2000
-      - key: WORKER_FAILURE_BACKOFF_MS
-        value: 7000
-      - key: TINY_TIMEOUT_MS
-        value: 15000
-
-  - type: worker
-    name: tms-worker-tracking
-    runtime: node
-    rootDir: workers
-    plan: starter
-    buildCommand: npm ci
-    startCommand: npm run start:tracking
-    autoDeploy: true
-    envVars:
-      - key: NODE_ENV
-        value: production
-      - key: DATABASE_URL
-        sync: false
-      - key: TINY_BASE_URL
-        sync: false
-      - key: TINY_API_TOKEN
-        sync: false
-      - key: WORKER_NAME
-        value: tracking-polling-worker-render
-      - key: WORKER_POLL_INTERVAL_MS
-        value: 10000
-      - key: WORKER_TRACKING_BATCH_SIZE
-        value: 100
-      - key: WORKER_IDLE_BACKOFF_MS
-        value: 2000
-      - key: WORKER_FAILURE_BACKOFF_MS
-        value: 7000
-      - key: TINY_TIMEOUT_MS
-        value: 15000
-      - key: TINY_TRACKING_EVENTS_PATH
-        value: /shipments/{trackingCode}/events
-
-  - type: worker
-    name: tms-worker-tracking-total-express
-    runtime: node
-    rootDir: workers
-    plan: starter
-    buildCommand: npm ci
-    startCommand: npm run start:tracking:totalexpress
-    autoDeploy: true
-    envVars:
-      - key: NODE_ENV
-        value: production
-      # DATABASE_URL is the only secret this service needs: the Total
-      # Express carrier id and API credentials are loaded at startup from
-      # app.carriers / Supabase Vault (see workers/src/carrierCredentials.js
-      # and workers/src/totalExpressTrackingMain.js), not from env vars.
-      - key: DATABASE_URL
-        sync: false
-      - key: WORKER_NAME
-        value: tracking-polling-worker-total-express-render
-      - key: WORKER_POLL_INTERVAL_MS
-        value: 30000
-      - key: WORKER_TRACKING_BATCH_SIZE
-        value: 100
-      - key: WORKER_IDLE_BACKOFF_MS
-        value: 5000
-      - key: WORKER_FAILURE_BACKOFF_MS
-        value: 10000
-
-  - type: worker
-    name: tms-worker-tracking-rte
-    runtime: node
-    rootDir: workers
-    plan: starter
-    buildCommand: npm ci
-    startCommand: npm run start:tracking:rte
-    autoDeploy: true
-    envVars:
-      - key: NODE_ENV
-        value: production
-      # DATABASE_URL is the only secret this service needs: the RTE
-      # carrier id and API credentials are loaded at startup from
-      # app.carriers / Supabase Vault (see workers/src/carrierCredentials.js
-      # and workers/src/rteTrackingMain.js), not from env vars.
-      - key: DATABASE_URL
-        sync: false
-      - key: WORKER_NAME
-        value: tracking-polling-worker-rte-render
-      - key: WORKER_POLL_INTERVAL_MS
-        value: 900000
-      - key: WORKER_IDLE_BACKOFF_MS
-        value: 30000
-      - key: WORKER_FAILURE_BACKOFF_MS
-        value: 60000
-      - key: RTE_LOOKBACK_DAYS
-        value: 30
+  # tms-worker-tiny-sync, tms-worker-tracking, tms-worker-tracking-total-express
+  # and tms-worker-tracking-rte are NOT deployed here. Render's free plan does
+  # not support background workers at all (only web services, Postgres and
+  # static sites), and the Starter compute plan needed for a worker costs
+  # ~$7/month per service. Those 4 workers instead run locally as Windows
+  # Scheduled Tasks (see workers/src/*Once.js), polling on a timer and
+  # exiting instead of running as long-lived processes. This file can be
+  # extended with them again later if this project moves to a paid Render
+  # plan.
 
   - type: web
     name: tms-web
     runtime: node
     rootDir: apps/web
-    plan: starter
+    plan: free
     buildCommand: npm ci && npm run build
     startCommand: npm run start
     healthCheckPath: /login
