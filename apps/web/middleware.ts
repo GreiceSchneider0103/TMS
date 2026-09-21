@@ -11,5 +11,12 @@ export function middleware(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon.ico).*)']
+  // Exclude /api/* from this page-redirect middleware. It was previously
+  // catching POST /api/session/login (no session cookie yet, since that's
+  // the endpoint that CREATES the cookie) and 307-redirecting it to the
+  // /login PAGE, which only handles GET -> Next.js replied 405 with an
+  // HTML error page, which the frontend then failed to JSON.parse
+  // ("Unexpected token '<'"). API routes should return JSON on auth
+  // failure themselves, not be redirected to an HTML page.
+  matcher: ['/((?!_next/static|_next/image|favicon.ico|api).*)']
 };
