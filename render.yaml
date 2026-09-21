@@ -57,7 +57,13 @@ services:
     runtime: node
     rootDir: apps/web
     plan: free
-    buildCommand: npm ci && npm run build
+    # NODE_ENV=production below makes `npm ci` omit devDependencies
+    # (typescript, eslint, eslint-config-next, @types/*) by default, which
+    # breaks `next build`'s module/path-alias resolution (the "Module not
+    # found: Can't resolve '@/...'" failures). --include=dev forces npm to
+    # install them anyway during the build step; NODE_ENV=production still
+    # applies normally at runtime for npm run start.
+    buildCommand: npm ci --include=dev && npm run build
     startCommand: npm run start
     healthCheckPath: /login
     autoDeploy: true
