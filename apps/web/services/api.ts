@@ -1,4 +1,5 @@
 import { AnyObj } from './types';
+import { getApiKey } from './session';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:3001';
 
@@ -11,17 +12,18 @@ export async function api<T = AnyObj>(path: string, init?: RequestInit): Promise
   const method = String(init?.method || 'GET').toUpperCase();
   const mutating = method === 'POST' || method === 'PATCH' || method === 'PUT' || method === 'DELETE';
   const idem = mutating ? correlationId() : null;
+  const apiKey = getApiKey();
 
   const res = await fetch(`${API_BASE}${path}`, {
     ...init,
     headers: {
       'content-type': 'application/json',
       'x-correlation-id': correlationId(),
+      ...(apiKey ? { 'x-api-key': apiKey } : {}),
       ...(idem ? { 'x-idempotency-key': idem } : {}),
       ...(init?.headers || {})
     },
-    cache: 'no-store',
-    credentials: 'include'
+    cache: 'no-store'
   });
 
   const contentType = res.headers.get('content-type') || '';

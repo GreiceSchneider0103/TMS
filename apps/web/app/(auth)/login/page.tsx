@@ -1,6 +1,9 @@
 'use client';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { setSession } from '@/services/session';
+
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:3001';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -8,18 +11,18 @@ export default function LoginPage() {
   const [busy, setBusy] = useState(false);
 
   async function submit() {
-    if (!apiKey.trim()) return alert('Informe a API key.');
+    const trimmed = apiKey.trim();
+    if (!trimmed) return alert('Informe a API key.');
     setBusy(true);
     try {
-      const res = await fetch('/api/session/login', {
+      const res = await fetch(`${API_BASE}/auth/session`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ apiKey: apiKey.trim() })
+        body: JSON.stringify({ apiKey: trimmed })
       });
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || 'Falha no login');
-      }
+      const data = await res.json();
+      if (!res.ok || data?.error) throw new Error(data?.error || 'Falha no login');
+      setSession(trimmed);
       router.push('/dashboard');
     } catch (err: any) {
       alert(err.message);

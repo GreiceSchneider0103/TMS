@@ -1,6 +1,7 @@
 'use client';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
+import { clearSession } from '@/services/session';
 
 const links = [
   ['Dashboard', '/dashboard', '◻️'],
@@ -39,7 +40,8 @@ export function Sidebar() {
       <button
         className="logout-btn"
         onClick={() => {
-          fetch('/api/session/logout', { method: 'POST' }).finally(() => router.push('/login'));
+          clearSession();
+          router.push('/login');
         }}
       >
         Sair

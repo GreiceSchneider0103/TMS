@@ -1,0 +1,10 @@
+const fs = require('fs');
+const raw = fs.readFileSync('C:\\Users\\Usuario\\TMS\\apps\\web\\package-lock.json', 'utf8');
+const json = JSON.parse(raw);
+console.log('ROOT ENTRY:', JSON.stringify(json.packages[""], null, 2));
+console.log('---NEXT ENTRY---');
+console.log(JSON.stringify(json.packages["node_modules/next"], null, 2).slice(0, 1500));
+console.log('---dependencies top level keys sample---');
+console.log(Object.keys(json.packages).slice(0, 30));
+console.log('---dependencies top level keys LAST 30---');
+console.log(Object.keys(json.packages).slice(-30));
