@@ -3,6 +3,24 @@ import { parseFreightXlsx } from '../services/freightTableImporter.js';
 import { requireAnyRole } from '../utils/context.js';
 import { logAudit } from '../services/audit.js';
 
+const BULK_INSERT_CHUNK_SIZE = 500;
+
+async function bulkInsert(client, table, columns, rows) {
+  for (let offset = 0; offset < rows.length; offset += BULK_INSERT_CHUNK_SIZE) {
+    const chunk = rows.slice(offset, offset + BULK_INSERT_CHUNK_SIZE);
+    const values = [];
+    const tuples = chunk.map((row, i) => {
+      const placeholders = row.map((_, j) => `$${i * columns.length + j + 1}`);
+      values.push(...row);
+      return `(${placeholders.join(',')})`;
+    });
+    await client.query(
+      `insert into ${table}(${columns.join(',')}) values ${tuples.join(',')}`,
+      values
+    );
+  }
+}
+
 export function registerFreightTableRoutes(app) {
   app.get('/freight-tables', requireAnyRole(['admin', 'operador_logistico', 'visualizador'], async ({ ctx }) => {
     const { rows } = await query(
@@ -35,16 +53,14 @@ export function registerFreightTableRoutes(app) {
          values($1,$2,$3,'DRAFT',$4,$5) returning *`,
         [table.rows[0].id, ctx.accountId, body.versionLabel || `v-${Date.now()}`, file.rows[0].storage_path, ctx.userId]
       );
-      for (const r of parsed.normalized.routes) {
-        await client.query(
-          `insert into app.freight_routes(version_id, account_id, cep_start, cep_end, state, city, min_weight, max_weight, base_amount, extra_per_kg, min_freight, ad_valorem_pct, gris_pct, trt_amount, tda_amount, cubing_factor, sla_days)
-           values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`,
-          [version.rows[0].id, ctx.accountId, r.cep_start, r.cep_end, r.state, r.city, r.min_weight, r.max_weight, r.base_amount, r.extra_per_kg, r.min_freight, r.ad_valorem_pct, r.gris_pct, r.trt_amount, r.tda_amount, r.cubing_factor, r.sla_days]
-        );
-      }
-      for (const f of parsed.normalized.recipientFees) {
-        await client.query(`insert into app.freight_recipient_fees(account_id, version_id, recipient_document, fee_type, amount) values($1,$2,$3,$4,$5)`, [ctx.accountId, version.rows[0].id, f.recipient_document, f.fee_type, f.amount]);
-      }
+      await bulkInsert(client, 'app.freight_routes',
+        ['version_id', 'account_id', 'cep_start', 'cep_end', 'state', 'city', 'min_weight', 'max_weight', 'base_amount', 'extra_per_kg', 'min_freight', 'ad_valorem_pct', 'gris_pct', 'trt_amount', 'tda_amount', 'cubing_factor', 'sla_days'],
+        parsed.normalized.routes.map((r) => [version.rows[0].id, ctx.accountId, r.cep_start, r.cep_end, r.state, r.city, r.min_weight, r.max_weight, r.base_amount, r.extra_per_kg, r.min_freight, r.ad_valorem_pct, r.gris_pct, r.trt_amount, r.tda_amount, r.cubing_factor, r.sla_days])
+      );
+      await bulkInsert(client, 'app.freight_recipient_fees',
+        ['account_id', 'version_id', 'recipient_document', 'fee_type', 'amount'],
+        parsed.normalized.recipientFees.map((f) => [ctx.accountId, version.rows[0].id, f.recipient_document, f.fee_type, f.amount])
+      );
       return { table: table.rows[0], version: version.rows[0], file: file.rows[0] };
     });
 
