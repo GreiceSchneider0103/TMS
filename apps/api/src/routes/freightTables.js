@@ -4,6 +4,21 @@ import { requireAnyRole } from '../utils/context.js';
 import { logAudit } from '../services/audit.js';
 
 export function registerFreightTableRoutes(app) {
+  app.get('/freight-tables', requireAnyRole(['admin', 'operador_logistico', 'visualizador'], async ({ ctx }) => {
+    const { rows } = await query(
+      `select t.id as table_id, t.name, c.name as carrier_name, v.id as version_id, v.version_label, v.status, v.published_at, v.created_at
+       from app.freight_tables t
+       left join app.carriers c on c.id = t.carrier_id
+       left join lateral (
+         select * from app.freight_table_versions where table_id = t.id order by created_at desc limit 1
+       ) v on true
+       where t.account_id = $1
+       order by t.created_at desc`,
+      [ctx.accountId]
+    );
+    return { items: rows, correlationId: ctx.correlationId };
+  }));
+
   app.post('/freight-tables/import', requireAnyRole(['admin', 'operador_logistico'], async ({ ctx, body }) => {
     const parsed = parseFreightXlsx(body.fileBase64);
     if (!parsed.ok) return { ok: false, errors: parsed.errors, preview: parsed.preview, correlationId: ctx.correlationId };

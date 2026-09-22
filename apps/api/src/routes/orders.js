@@ -11,9 +11,44 @@ export function registerOrderRoutes(app) {
   app.get('/orders', requireAnyRole(['operador_logistico', 'financeiro', 'visualizador', 'analista_integracao'], async ({ ctx, query: qs }) => {
     const limit = parseIntWithBounds(qs.limit, 50, { fieldName: 'limit', min: 1, max: 500 });
     const offset = parseIntWithBounds(qs.offset, 0, { fieldName: 'offset', min: 0, max: 1000000 });
+
+    const conditions = ['o.account_id = $1'];
+    const params = [ctx.accountId];
+
+    if (qs.status) {
+      params.push(String(qs.status));
+      conditions.push(`o.status = $${params.length}`);
+    }
+    if (qs.carrier) {
+      params.push(`%${String(qs.carrier)}%`);
+      conditions.push(`exists (
+        select 1 from app.shipments s join app.carriers c on c.id = s.carrier_id
+        where s.account_id = $1 and s.order_id = o.id and c.name ilike $${params.length}
+      )`);
+    }
+    if (qs.from) {
+      params.push(String(qs.from));
+      conditions.push(`o.created_at >= $${params.length}`);
+    }
+    if (qs.to) {
+      params.push(String(qs.to));
+      conditions.push(`o.created_at < ($${params.length}::date + interval '1 day')`);
+    }
+
+    params.push(limit);
+    const limitIdx = params.length;
+    params.push(offset);
+    const offsetIdx = params.length;
+
     const { rows } = await query(
-      `select * from app.orders where account_id = $1 order by created_at desc limit $2 offset $3`,
-      [ctx.accountId, limit, offset]
+      `select o.*, r.legal_name as recipient_name, r.postal_code as destination_postal_code,
+              (select c.name from app.shipments s join app.carriers c on c.id = s.carrier_id
+               where s.account_id = $1 and s.order_id = o.id order by s.created_at desc limit 1) as carrier_name
+       from app.orders o
+       left join app.recipients r on r.id = o.recipient_id and r.account_id = $1
+       where ${conditions.join(' and ')}
+       order by o.created_at desc limit $${limitIdx} offset $${offsetIdx}`,
+      params
     );
     return { items: rows, total: rows.length, correlationId: ctx.correlationId };
   }));

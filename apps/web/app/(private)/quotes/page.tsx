@@ -1,21 +1,29 @@
 'use client';
-import { useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { api } from '@/services/api';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Panel } from '@/components/ui/Panel';
 import { StatusBadge } from '@/components/ui/StatusBadge';
+import { downloadCsv } from '@/services/csv';
 
-export default function QuotesPage() {
+function QuotesInner() {
+  const searchParams = useSearchParams();
   const [orderId, setOrderId] = useState('');
   const [quoteId, setQuoteId] = useState('');
   const [out, setOut] = useState<any>(null);
   const [busy, setBusy] = useState(false);
 
+  useEffect(() => {
+    const fromUrl = searchParams.get('orderId');
+    if (fromUrl) setOrderId(fromUrl);
+  }, [searchParams]);
+
   const results = out?.results || [];
 
   return (
     <div className="grid">
-      <PageHeader title="Cotações" subtitle="Histórico e simulação de frete" actions={<button className="btn primary">Exportar</button>} />
+      <PageHeader title="Cotações" subtitle="Histórico e simulação de frete" actions={<button className="btn primary" disabled={!results.length} onClick={() => downloadCsv('cotacoes.csv', results)}>Exportar</button>} />
 
       <Panel title="Simulação / Consulta de cotação">
         <div className="filter-row">
@@ -47,7 +55,7 @@ export default function QuotesPage() {
             <thead><tr><th>ID Cotação</th><th>Transportadora</th><th>Valor</th><th>Prazo</th><th>Status</th></tr></thead>
             <tbody>
               {results.length ? results.map((q: any) => (
-                <tr key={q.id}>
+                <tr key={q.id} className="mono-row" onClick={() => setQuoteId(q.id)} style={{ cursor: 'pointer' }}>
                   <td className="mono">{q.id}</td>
                   <td>{q.carrier_name || q.carrier_id || '-'}</td>
                   <td>R$ {Number(q.total_amount || 0).toFixed(2)}</td>
@@ -62,5 +70,13 @@ export default function QuotesPage() {
         </div>
       </Panel>
     </div>
+  );
+}
+
+export default function QuotesPage() {
+  return (
+    <Suspense>
+      <QuotesInner />
+    </Suspense>
   );
 }

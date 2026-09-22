@@ -11,7 +11,8 @@ import { ErrorState } from '@/components/ui/ErrorState';
 export function TrackingPanel() {
   const shipments = useApi(() => api('/shipments'), []);
   const [selected, setSelected] = useState<string>('');
-  const timeline = useApi(() => selected ? api(`/tracking/shipment/${selected}`) : Promise.resolve({ items: [] } as any), [selected]);
+  const [nonce, setNonce] = useState(0);
+  const timeline = useApi(() => selected ? api(`/tracking/shipment/${selected}`) : Promise.resolve({ items: [] } as any), [selected, nonce]);
 
   const shipmentItems = (shipments.data as any)?.items || [];
   const events = (timeline.data as any)?.items || [];
@@ -29,7 +30,7 @@ export function TrackingPanel() {
                 <option key={s.id} value={s.id}>{s.tracking_code || s.id.slice(0, 8)} - {s.status}</option>
               ))}
             </select>
-            <button className="btn primary" disabled={!selected}>Rastrear</button>
+            <button className="btn primary" disabled={!selected} onClick={() => setNonce((v) => v + 1)}>Atualizar rastreio</button>
           </div>
         )}
       </Panel>

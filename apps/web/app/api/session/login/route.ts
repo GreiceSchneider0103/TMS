@@ -1,18 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
+import crypto from 'node:crypto';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:3001';
 
 export async function POST(req: NextRequest) {
   const body = await req.json();
   const apiKey = String(body?.apiKey || '').trim();
-  const email = String(body?.email || '').trim();
-  const password = String(body?.password || '').trim();
 
-  if (!email || !password || !apiKey) {
-    return NextResponse.json({ error: 'email, password and apiKey are required' }, { status: 400 });
+  if (!apiKey) {
+    return NextResponse.json({ error: 'apiKey is required' }, { status: 400 });
   }
-
-  console.log('[login] API_BASE resolved to:', API_BASE);
 
   let upstream: Response;
   try {
@@ -20,7 +17,7 @@ export async function POST(req: NextRequest) {
       method: 'POST',
       headers: {
         'content-type': 'application/json',
-        'x-idempotency-key': `login-${email}`
+        'x-idempotency-key': `login-${crypto.createHash('sha256').update(apiKey).digest('hex').slice(0, 16)}`
       },
       body: JSON.stringify({ apiKey })
     });

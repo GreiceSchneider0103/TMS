@@ -1,17 +1,13 @@
 'use client';
 import { useState } from 'react';
 import { api } from '@/services/api';
+import { useApi } from '@/hooks/useApi';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { Panel } from '@/components/ui/Panel';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { LoadingState } from '@/components/ui/LoadingState';
-
-const mockRows = [
-  { name: 'Tabela Correios 2026', carrier: 'Correios', version: 'v3.2', status: 'Publicada', date: '01/03/2026' },
-  { name: 'Tabela Jadlog Q1', carrier: 'Jadlog', version: 'v2.1', status: 'Publicada', date: '28/02/2026' },
-  { name: 'Total Express Standard', carrier: 'Total Express', version: 'v1.8', status: 'Publicada', date: '25/02/2026' },
-  { name: 'Azul Cargo Premium', carrier: 'Azul Cargo', version: 'v2.0', status: 'Rascunho', date: '15/03/2026' }
-];
+import { EmptyState } from '@/components/ui/EmptyState';
+import { ErrorState } from '@/components/ui/ErrorState';
 
 export function FreightManager() {
   const [out, setOut] = useState<any>(null);
@@ -20,6 +16,9 @@ export function FreightManager() {
   const [carrierId, setCarrierId] = useState('');
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
+  const [nonce, setNonce] = useState(0);
+  const tables = useApi(() => api('/freight-tables'), [nonce]);
+  const tableRows = (tables.data as any)?.items || [];
 
   async function toBase64(file: File) {
     return new Promise<string>((resolve, reject) => {
@@ -51,6 +50,7 @@ export function FreightManager() {
       setOut(res);
       setVersionId(importedVersionId);
       setMessage(importedVersionId ? `Import concluído. Versão ${importedVersionId}` : 'Import concluído sem versionId retornado.');
+      setNonce((v) => v + 1);
     } catch (error: any) {
       setMessage(`Falha no import: ${error?.message || 'erro inesperado'}`);
     } finally {
@@ -58,8 +58,8 @@ export function FreightManager() {
     }
   }
 
-  async function runVersionAction(action: 'publish' | 'rollback') {
-    const trimmed = versionId.trim();
+  async function runVersionAction(action: 'publish' | 'rollback', targetVersionId?: string) {
+    const trimmed = (targetVersionId || versionId).trim();
     if (!trimmed) return setMessage('Informe versionId para executar a ação.');
 
     setBusy(true);
@@ -68,6 +68,7 @@ export function FreightManager() {
       const res = await api(endpoint, { method: 'POST', body: '{}' });
       setOut(res);
       setMessage(action === 'publish' ? `Versão ${trimmed} publicada.` : `Rollback da versão ${trimmed} executado.`);
+      setNonce((v) => v + 1);
     } catch (error: any) {
       setMessage(`Falha: ${error?.message || 'erro inesperado'}`);
     } finally {
@@ -103,22 +104,33 @@ export function FreightManager() {
         {message ? <div className="empty-state">{message}</div> : null}
       </Panel>
 
-      <Panel title="Tabelas Cadastradas">
-        <div className="table-wrap">
-          <table>
-            <thead><tr><th>Nome</th><th>Transportadora</th><th>Versão</th><th>Status</th><th>Data Upload</th><th>Ações</th></tr></thead>
-            <tbody>
-              {mockRows.map((r) => (
-                <tr key={r.name}>
-                  <td>{r.name}</td><td>{r.carrier}</td><td>{r.version}</td>
-                  <td><StatusBadge status={r.status} /></td>
-                  <td>{r.date}</td>
-                  <td><div className="row-actions"><button className="btn ghost">Ver</button><button className="btn">Rollback</button></div></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+      <Panel title="Tabelas Cadastradas" right={<button className="btn" onClick={() => setNonce((v) => v + 1)}>Atualizar</button>}>
+        {tables.loading ? <LoadingState text="Carregando tabelas..." /> : tables.error ? <ErrorState text={tables.error} /> : tableRows.length === 0 ? <EmptyState /> : (
+          <div className="table-wrap">
+            <table>
+              <thead><tr><th>Nome</th><th>Transportadora</th><th>Versão</th><th>Status</th><th>Data</th><th>Ações</th></tr></thead>
+              <tbody>
+                {tableRows.map((r: any) => (
+                  <tr key={r.table_id}>
+                    <td>{r.name}</td><td>{r.carrier_name || '-'}</td><td>{r.version_label || '-'}</td>
+                    <td><StatusBadge status={r.status || 'DRAFT'} /></td>
+                    <td>{r.created_at ? new Date(r.created_at).toLocaleDateString() : '-'}</td>
+                    <td>
+                      <div className="row-actions">
+                        <button className="btn ghost" onClick={() => setOut(r)}>Ver</button>
+                        {r.status === 'DRAFT' ? (
+                          <button className="btn primary" disabled={busy || !r.version_id} onClick={() => runVersionAction('publish', r.version_id)}>Publicar</button>
+                        ) : (
+                          <button className="btn" disabled={busy || !r.version_id} onClick={() => runVersionAction('rollback', r.version_id)}>Rollback</button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </Panel>
 
       {previewRows ? <Panel title="Preview da importação"><pre className="mono" style={{ margin: 0 }}>{JSON.stringify(previewRows, null, 2)}</pre></Panel> : null}

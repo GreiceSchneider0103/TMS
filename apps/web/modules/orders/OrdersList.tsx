@@ -1,5 +1,6 @@
 'use client';
 import Link from 'next/link';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useState } from 'react';
 import { api } from '@/services/api';
 import { useApi } from '@/hooks/useApi';
@@ -9,26 +10,48 @@ import { StatusBadge } from '@/components/ui/StatusBadge';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { LoadingState } from '@/components/ui/LoadingState';
 import { ErrorState } from '@/components/ui/ErrorState';
+import { downloadCsv } from '@/services/csv';
 
 export function OrdersList() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const q = searchParams.get('q') || '';
   const [status, setStatus] = useState('');
   const [carrier, setCarrier] = useState('');
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
   const [nonce, setNonce] = useState(0);
+  const [busyId, setBusyId] = useState('');
   const { data, loading, error } = useApi(
     () => api(`/orders?status=${status}&carrier=${carrier}&from=${from}&to=${to}&limit=100`),
     [status, carrier, from, to, nonce]
   );
 
-  const items = (data as any)?.items || [];
+  const allItems = (data as any)?.items || [];
+  const items = q
+    ? allItems.filter((o: any) => `${o.order_number} ${o.external_id} ${o.id}`.toLowerCase().includes(q.toLowerCase()))
+    : allItems;
+
+  async function despachar(order: any) {
+    const quoteResultId = window.prompt('Informe o ID da cotação selecionada (quoteResultId) para despachar este pedido:');
+    if (!quoteResultId) return;
+    setBusyId(order.id);
+    try {
+      await api('/shipments', { method: 'POST', body: JSON.stringify({ orderId: order.id, quoteResultId: quoteResultId.trim() }) });
+      setNonce((v) => v + 1);
+    } catch (e: any) {
+      alert(`Falha ao despachar: ${e.message}`);
+    } finally {
+      setBusyId('');
+    }
+  }
 
   return (
     <div className="grid">
       <PageHeader
         title="Pedidos"
         subtitle="Gerencie todos os pedidos do sistema"
-        actions={<button className="btn primary">Exportar</button>}
+        actions={<button className="btn primary" onClick={() => downloadCsv('pedidos.csv', items)}>Exportar</button>}
       />
 
       <Panel title="Lista de Pedidos" right={<button className="btn" onClick={() => setNonce((v) => v + 1)}>Atualizar</button>}>
@@ -45,6 +68,7 @@ export function OrdersList() {
           <input className="input" type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
           <input className="input" type="date" value={to} onChange={(e) => setTo(e.target.value)} />
           <input className="input" placeholder="Transportadora" value={carrier} onChange={(e) => setCarrier(e.target.value)} />
+          {q ? <button className="btn ghost" onClick={() => router.push('/orders')}>Limpar busca: "{q}"</button> : null}
         </div>
 
         {loading ? <LoadingState text="Carregando pedidos..." /> : error ? <ErrorState text={error} /> : items.length === 0 ? <EmptyState /> : (
@@ -73,8 +97,8 @@ export function OrdersList() {
                     <td>
                       <div className="row-actions">
                         <Link className="btn ghost" href={`/orders/${o.id}`}>Ver</Link>
-                        <button className="btn ghost">Cotação</button>
-                        <button className="btn primary">Despachar</button>
+                        <Link className="btn ghost" href={`/quotes?orderId=${o.id}`}>Cotação</Link>
+                        <button className="btn primary" disabled={busyId === o.id} onClick={() => despachar(o)}>Despachar</button>
                       </div>
                     </td>
                   </tr>
