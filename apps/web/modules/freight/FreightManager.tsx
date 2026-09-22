@@ -16,6 +16,8 @@ const mockRows = [
 export function FreightManager() {
   const [out, setOut] = useState<any>(null);
   const [versionId, setVersionId] = useState('');
+  const [tableName, setTableName] = useState('');
+  const [carrierId, setCarrierId] = useState('');
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -29,11 +31,22 @@ export function FreightManager() {
   }
 
   async function importWorkbook(file: File) {
+    if (!tableName.trim()) return setMessage('Informe o nome da tabela antes de importar.');
     setBusy(true);
     setMessage('Importando planilha...');
     try {
-      const base64Content = await toBase64(file);
-      const res = await api('/freight-tables/import', { method: 'POST', body: JSON.stringify({ base64Content }) });
+      const fileBase64 = await toBase64(file);
+      const res = await api('/freight-tables/import', {
+        method: 'POST',
+        body: JSON.stringify({
+          fileBase64,
+          fileName: file.name,
+          mimeType: file.type || 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          byteSize: file.size,
+          tableName: tableName.trim(),
+          carrierId: carrierId.trim() || null
+        })
+      });
       const importedVersionId = res?.version?.id ? String(res.version.id) : '';
       setOut(res);
       setVersionId(importedVersionId);
@@ -66,11 +79,19 @@ export function FreightManager() {
 
   return (
     <div className="grid">
-      <PageHeader title="Tabelas de Frete" subtitle="Gerenciar tabelas de preços e prazos" actions={<label className="btn primary" style={{ display: 'inline-flex' }}>Importar Planilha<input hidden type="file" accept=".xlsx" disabled={busy} onChange={async (e) => {
-        const file = e.target.files?.[0];
-        if (!file) return;
-        await importWorkbook(file);
-      }} /></label>} />
+      <PageHeader title="Tabelas de Frete" subtitle="Gerenciar tabelas de preços e prazos" />
+
+      <Panel title="Importar planilha">
+        <div className="filter-row">
+          <input className="input" placeholder="Nome da tabela (obrigatório)" value={tableName} disabled={busy} onChange={(e) => setTableName(e.target.value)} />
+          <input className="input" placeholder="ID da transportadora (opcional)" value={carrierId} disabled={busy} onChange={(e) => setCarrierId(e.target.value)} />
+          <label className="btn primary" style={{ display: 'inline-flex' }}>Importar Planilha<input hidden type="file" accept=".xlsx" disabled={busy} onChange={async (e) => {
+            const file = e.target.files?.[0];
+            if (!file) return;
+            await importWorkbook(file);
+          }} /></label>
+        </div>
+      </Panel>
 
       <Panel title="Ações de versão">
         <div className="filter-row">
