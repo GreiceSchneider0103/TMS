@@ -1,0 +1,226 @@
+import { query, transaction } from '../db.js';
+import { ShopeeClient } from './shopeeClient.js';
+import { createAndCalculateQuote, hashRequest } from '../routes/quotes.js';
+
+const ORDER_STATUS_MAP = {
+  UNPAID: 'CREATED',
+  READY_TO_SHIP: 'READY_FOR_QUOTE',
+  PROCESSED: 'READY_FOR_QUOTE',
+  SHIPPED: 'DISPATCHED',
+  TO_CONFIRM_RECEIVE: 'IN_TRANSIT',
+  IN_CANCEL: 'EXCEPTION',
+  CANCELLED: 'CANCELED',
+  TO_RETURN: 'RETURNED',
+  COMPLETED: 'DELIVERED'
+};
+
+export async function getActiveShopeeShops(accountId) {
+  const { rows } = await query('select * from app.shopee_shops where account_id = $1 and is_active = true', [accountId]);
+  return rows;
+}
+
+export async function getValidAccessToken(shop) {
+  const expiresInMs = new Date(shop.token_expires_at).getTime() - Date.now();
+  if (expiresInMs > 5 * 60 * 1000) return shop.access_token;
+
+  const client = new ShopeeClient({ isSandbox: shop.is_sandbox });
+  const refreshed = await client.refreshTokens({ refreshToken: shop.refresh_token, shopId: shop.shop_id });
+
+  const expiresAt = new Date(Date.now() + Number(refreshed.expire_in || 0) * 1000);
+  await query(
+    `update app.shopee_shops set access_token = $1, refresh_token = $2, token_expires_at = $3, updated_at = now()
+     where id = $4`,
+    [refreshed.access_token, refreshed.refresh_token, expiresAt.toISOString(), shop.id]
+  );
+  return refreshed.access_token;
+}
+
+export async function syncShopOrders({ accountId, shop, correlationId }) {
+  const client = new ShopeeClient({ isSandbox: shop.is_sandbox });
+  const accessToken = await getValidAccessToken(shop);
+
+  const timeTo = Math.floor(Date.now() / 1000);
+  const timeFrom = timeTo - 15 * 24 * 60 * 60;
+
+  const listRes = await client.shopRequest('/api/v2/order/get_order_list', {
+    accessToken,
+    shopId: shop.shop_id,
+    query: {
+      time_range_field: 'update_time',
+      time_from: timeFrom,
+      time_to: timeTo,
+      page_size: 50,
+      order_status: 'READY_TO_SHIP'
+    }
+  });
+
+  const orderSns = (listRes?.response?.order_list || []).map((o) => o.order_sn);
+  if (!orderSns.length) return { synced: 0, quoted: 0 };
+
+  const detailRes = await client.shopRequest('/api/v2/order/get_order_detail', {
+    accessToken,
+    shopId: shop.shop_id,
+    query: {
+      order_sn_list: orderSns.join(','),
+      response_optional_fields: 'item_list,recipient_address,total_amount,weight'
+    }
+  });
+
+  const orders = detailRes?.response?.order_list || [];
+  let synced = 0;
+  let quoted = 0;
+
+  for (const shopeeOrder of orders) {
+    const orderRow = await upsertOrder({ accountId, shop, shopeeOrder });
+    synced += 1;
+
+    if (orderRow.status === 'READY_FOR_QUOTE') {
+      const wasQuoted = await tryAutoQuote({ accountId, order: orderRow, correlationId });
+      if (wasQuoted) quoted += 1;
+    }
+  }
+
+  await query('update app.shopee_shops set last_synced_at = now() where id = $1', [shop.id]);
+  return { synced, quoted };
+}
+
+async function upsertOrder({ accountId, shop, shopeeOrder }) {
+  const externalId = `shopee-${shopeeOrder.order_sn}`;
+  const address = shopeeOrder.recipient_address || {};
+  const postalCode = String(address.zipcode || '').replace(/\D/g, '') || '00000000';
+  const totalAmount = Number(shopeeOrder.total_amount || 0);
+  const weightKg = Number(shopeeOrder.weight || 1);
+  const status = ORDER_STATUS_MAP[shopeeOrder.order_status] || 'CREATED';
+
+  const rawPayload = {
+    postal_code: postalCode,
+    state: address.state || null,
+    city: address.city || null,
+    weight_kg: weightKg,
+    length_cm: 10,
+    width_cm: 10,
+    height_cm: 10,
+    recipient_type: 'PF',
+    skus: (shopeeOrder.item_list || []).map((i) => i.item_sku).filter(Boolean),
+    categories: [],
+    shopee_order_sn: shopeeOrder.order_sn,
+    shopee_shop_id: shop.shop_id
+  };
+
+  const { rows } = await query(
+    `insert into app.orders(account_id, external_id, order_number, channel, total_amount, invoice_amount, status, raw_payload)
+     values($1,$2,$3,'shopee',$4,$4,$5,$6)
+     on conflict (account_id, external_id) do update set
+       total_amount = excluded.total_amount,
+       invoice_amount = excluded.invoice_amount,
+       status = case when app.orders.status in ('CREATED','READY_FOR_QUOTE') then excluded.status else app.orders.status end,
+       raw_payload = app.orders.raw_payload || excluded.raw_payload,
+       updated_at = now()
+     returning *`,
+    [accountId, externalId, shopeeOrder.order_sn, totalAmount, status, JSON.stringify(rawPayload)]
+  );
+  return rows[0];
+}
+
+async function tryAutoQuote({ accountId, order, correlationId }) {
+  const body = {
+    orderId: order.id,
+    destinationPostalCode: order.raw_payload?.postal_code || '00000000',
+    state: order.raw_payload?.state,
+    city: order.raw_payload?.city,
+    invoiceAmount: order.invoice_amount || order.total_amount,
+    weightKg: Number(order.raw_payload?.weight_kg || 1),
+    lengthCm: Number(order.raw_payload?.length_cm || 10),
+    widthCm: Number(order.raw_payload?.width_cm || 10),
+    heightCm: Number(order.raw_payload?.height_cm || 10),
+    recipientType: order.raw_payload?.recipient_type || 'PF',
+    channel: 'shopee',
+    skus: order.raw_payload?.skus || [],
+    categories: []
+  };
+
+  const result = await createAndCalculateQuote({ accountId, body, requestHash: hashRequest(body) });
+  if (!result.results.length) return false;
+
+  const best = result.results[0];
+  await query('update app.quote_results set selected = true where account_id = $1 and id = $2', [accountId, best.id]);
+  await query("update app.orders set status = 'QUOTED', updated_at = now() where account_id = $1 and id = $2", [accountId, order.id]);
+  return true;
+}
+
+export async function dispatchShopeeOrder({ accountId, orderId, correlationId }) {
+  const orderRes = await query('select * from app.orders where account_id = $1 and id = $2', [accountId, orderId]);
+  const order = orderRes.rows[0];
+  if (!order) throw new Error('Order not found');
+  if (order.channel !== 'shopee') throw new Error('Order is not a Shopee order');
+
+  const shopId = order.raw_payload?.shopee_shop_id;
+  const orderSn = order.raw_payload?.shopee_order_sn;
+  if (!shopId || !orderSn) throw new Error('Order is missing Shopee shop/order reference');
+
+  const shopRes = await query('select * from app.shopee_shops where account_id = $1 and shop_id = $2', [accountId, String(shopId)]);
+  const shop = shopRes.rows[0];
+  if (!shop) throw new Error('Shopee shop not connected');
+
+  const client = new ShopeeClient({ isSandbox: shop.is_sandbox });
+  const accessToken = await getValidAccessToken(shop);
+
+  const paramRes = await client.shopRequest('/api/v2/logistics/get_shipping_parameter', {
+    accessToken,
+    shopId: shop.shop_id,
+    query: { order_sn: orderSn }
+  });
+
+  const pickup = paramRes?.response?.pickup?.address_list?.[0];
+  const shipPayload = {
+    order_sn: orderSn,
+    pickup: pickup ? { address_id: pickup.address_id } : undefined
+  };
+
+  await client.shopRequest('/api/v2/logistics/ship_order', {
+    method: 'POST',
+    accessToken,
+    shopId: shop.shop_id,
+    body: shipPayload
+  });
+
+  const trackingRes = await client.shopRequest('/api/v2/logistics/get_tracking_number', {
+    accessToken,
+    shopId: shop.shop_id,
+    query: { order_sn: orderSn }
+  });
+  const trackingCode = trackingRes?.response?.tracking_number || null;
+
+  const quoteRes = await query(
+    `select id, carrier_id from app.quote_results where account_id = $1 and request_id = (
+       select id from app.quote_requests where account_id = $1 and order_id = $2 order by created_at desc limit 1
+     ) and selected = true limit 1`,
+    [accountId, orderId]
+  );
+  const selectedQuote = quoteRes.rows[0];
+
+  const idempotencyKey = `shopee-${orderSn}`;
+  const shipment = await transaction(async (client2) => {
+    const existing = await client2.query('select * from app.shipments where account_id = $1 and idempotency_key = $2', [accountId, idempotencyKey]);
+    let row;
+    if (existing.rows[0]) {
+      const upd = await client2.query(
+        'update app.shipments set tracking_code = $1, updated_at = now() where id = $2 returning *',
+        [trackingCode, existing.rows[0].id]
+      );
+      row = upd.rows[0];
+    } else {
+      const ins = await client2.query(
+        `insert into app.shipments(account_id, order_id, quote_result_id, carrier_id, tracking_code, status, idempotency_key)
+         values($1,$2,$3,$4,$5,'DISPATCHED',$6)
+         returning *`,
+        [accountId, orderId, selectedQuote?.id || null, selectedQuote?.carrier_id || null, trackingCode, idempotencyKey]
+      );
+      row = ins.rows[0];
+    }
+    await client2.query("update app.orders set status = 'DISPATCHED', updated_at = now() where account_id = $1 and id = $2", [accountId, orderId]);
+    return row;
+  });
+
+  return { shipment, trackingCode, correlationId };
+}

@@ -66,7 +66,7 @@ export function registerQuoteRoutes(app) {
   }));
 }
 
-async function createAndCalculateQuote({ accountId, body, requestHash }) {
+export async function createAndCalculateQuote({ accountId, body, requestHash }) {
   const existing = await query('select * from app.quote_requests where account_id = $1 and request_hash = $2', [accountId, requestHash]);
   let request = existing.rows[0];
   if (!request) {
@@ -111,7 +111,7 @@ async function createAndCalculateQuote({ accountId, body, requestHash }) {
   return { request, results: persisted };
 }
 
-function hashRequest(payload) {
+export function hashRequest(payload) {
   return crypto.createHash('sha256').update(JSON.stringify(payload)).digest('hex');
 }
 
