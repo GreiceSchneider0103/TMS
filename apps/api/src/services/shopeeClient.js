@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 
 const LIVE_HOST = 'https://partner.shopeemobile.com';
-const TEST_HOST = 'https://partner.test-stable.shopeemobile.com';
+const TEST_HOST = 'https://openplatform.sandbox.test-stable.shopee.sg';
 
 class ShopeeApiError extends Error {
   constructor(message, { status = 502, details = null } = {}) {
