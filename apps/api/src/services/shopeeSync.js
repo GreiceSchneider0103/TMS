@@ -172,9 +172,10 @@ export async function dispatchShopeeOrder({ accountId, orderId, correlationId })
   });
 
   const pickup = paramRes?.response?.pickup?.address_list?.[0];
+  const pickupTimeId = pickup?.time_slot_list?.[0]?.pickup_time_id;
   const shipPayload = {
     order_sn: orderSn,
-    pickup: pickup ? { address_id: pickup.address_id } : undefined
+    pickup: pickup ? { address_id: pickup.address_id, pickup_time_id: pickupTimeId } : undefined
   };
 
   await client.shopRequest('/api/v2/logistics/ship_order', {
