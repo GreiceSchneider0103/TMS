@@ -9,8 +9,16 @@ import { LoadingState } from '@/components/ui/LoadingState';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { ErrorState } from '@/components/ui/ErrorState';
 
+const COUNT_LABELS: Record<string, string> = {
+  tipo_carga_detectados: 'Tipos de carga',
+  rotas_detectadas: 'Rotas',
+  taxas_detectadas: 'Taxas por destinatário',
+  erros_detectados: 'Erros'
+};
+
 export function FreightManager() {
-  const [out, setOut] = useState<any>(null);
+  const [summary, setSummary] = useState<{ counts: Record<string, number>; errors?: string[] } | null>(null);
+  const [selectedTable, setSelectedTable] = useState<any>(null);
   const [versionId, setVersionId] = useState('');
   const [tableName, setTableName] = useState('');
   const [carrierId, setCarrierId] = useState('');
@@ -47,12 +55,12 @@ export function FreightManager() {
         })
       });
       const importedVersionId = res?.version?.id ? String(res.version.id) : '';
-      setOut(res);
+      setSummary({ counts: res?.preview?.counts || {}, errors: res?.errors });
       setVersionId(importedVersionId);
-      setMessage(importedVersionId ? `Import concluído. Versão ${importedVersionId}` : 'Import concluído sem versionId retornado.');
+      setMessage(importedVersionId ? `Importação concluída. Versão criada como rascunho — publique para entrar em uso.` : 'Importação encontrou problemas na planilha.');
       setNonce((v) => v + 1);
     } catch (error: any) {
-      setMessage(`Falha no import: ${error?.message || 'erro inesperado'}`);
+      setMessage(`Falha ao importar a planilha: ${translateError(error?.message)}`);
     } finally {
       setBusy(false);
     }
@@ -65,18 +73,15 @@ export function FreightManager() {
     setBusy(true);
     try {
       const endpoint = action === 'publish' ? `/freight-tables/versions/${trimmed}/publish` : `/freight-tables/versions/${trimmed}/rollback`;
-      const res = await api(endpoint, { method: 'POST', body: '{}' });
-      setOut(res);
+      await api(endpoint, { method: 'POST', body: '{}' });
       setMessage(action === 'publish' ? `Versão ${trimmed} publicada.` : `Rollback da versão ${trimmed} executado.`);
       setNonce((v) => v + 1);
     } catch (error: any) {
-      setMessage(`Falha: ${error?.message || 'erro inesperado'}`);
+      setMessage(`Falha ao ${action === 'publish' ? 'publicar' : 'reverter'} a versão: ${translateError(error?.message)}`);
     } finally {
       setBusy(false);
     }
   }
-
-  const previewRows = out?.preview?.rows || out?.version?.stats || null;
 
   return (
     <div className="grid">
@@ -117,7 +122,7 @@ export function FreightManager() {
                     <td>{r.created_at ? new Date(r.created_at).toLocaleDateString() : '-'}</td>
                     <td>
                       <div className="row-actions">
-                        <button className="btn ghost" onClick={() => setOut(r)}>Ver</button>
+                        <button className="btn ghost" onClick={() => setSelectedTable(r)}>Ver</button>
                         {r.status === 'DRAFT' ? (
                           <button className="btn primary" disabled={busy || !r.version_id} onClick={() => runVersionAction('publish', r.version_id)}>Publicar</button>
                         ) : (
@@ -133,8 +138,44 @@ export function FreightManager() {
         )}
       </Panel>
 
-      {previewRows ? <Panel title="Preview da importação"><pre className="mono" style={{ margin: 0 }}>{JSON.stringify(previewRows, null, 2)}</pre></Panel> : null}
-      {out ? <Panel title="Resposta técnica"><pre className="mono" style={{ margin: 0 }}>{JSON.stringify(out, null, 2)}</pre></Panel> : null}
+      {summary ? (
+        <Panel title="Resumo da importação">
+          <div className="filter-row">
+            {Object.entries(summary.counts).map(([key, value]) => (
+              <StatusBadge key={key} status={`${COUNT_LABELS[key] || key}: ${value}`} />
+            ))}
+          </div>
+          {summary.errors && summary.errors.length > 0 ? (
+            <ul>
+              {summary.errors.map((err, i) => <li key={i}>{err}</li>)}
+            </ul>
+          ) : null}
+        </Panel>
+      ) : null}
+
+      {selectedTable ? (
+        <Panel title="Detalhes da tabela" right={<button className="btn ghost" onClick={() => setSelectedTable(null)}>Fechar</button>}>
+          <div className="grid">
+            <div><strong>Nome:</strong> {selectedTable.name || '-'}</div>
+            <div><strong>Transportadora:</strong> {selectedTable.carrier_name || '-'}</div>
+            <div><strong>Versão:</strong> {selectedTable.version_label || '-'}</div>
+            <div><strong>Status:</strong> {selectedTable.status || '-'}</div>
+            <div><strong>Publicado em:</strong> {selectedTable.published_at ? new Date(selectedTable.published_at).toLocaleString() : 'Ainda não publicado'}</div>
+            <div><strong>Criado em:</strong> {selectedTable.created_at ? new Date(selectedTable.created_at).toLocaleString() : '-'}</div>
+          </div>
+        </Panel>
+      ) : null}
     </div>
   );
+}
+
+function translateError(message?: string): string {
+  if (!message) return 'erro inesperado';
+  const known: Record<string, string> = {
+    'Failed to fetch': 'não foi possível conectar ao servidor. Verifique sua conexão e tente novamente.',
+    'Forbidden': 'você não tem permissão para executar esta ação.',
+    'Payload too large': 'o arquivo é grande demais para ser enviado.',
+    'Unauthorized': 'sua sessão expirou. Faça login novamente.'
+  };
+  return known[message] || message;
 }

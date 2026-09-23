@@ -21,8 +21,8 @@ export function router() {
       const match = url.pathname.match(route.regex);
       const params = {};
       route.keys.forEach((k, i) => { params[k] = match[i + 1]; });
-      const body = await readBody(req);
       try {
+        const body = await readBody(req);
         const data = await route.handler({ req, res, body, query: Object.fromEntries(url.searchParams), params });
         if (!res.writableEnded) {
           res.writeHead(200, { 'content-type': 'application/json' });
@@ -67,7 +67,7 @@ function compile(path) {
 }
 
 async function readBody(req) {
-  const maxBytes = Number(process.env.REQUEST_BODY_LIMIT_BYTES || 1024 * 1024);
+  const maxBytes = Number(process.env.REQUEST_BODY_LIMIT_BYTES || 25 * 1024 * 1024);
   const chunks = [];
   let totalBytes = 0;
   for await (const chunk of req) {
@@ -75,8 +75,9 @@ async function readBody(req) {
     if (totalBytes > maxBytes) throw new HttpError(413, 'Payload too large');
     chunks.push(chunk);
   }
-  if (!chunks.length) return {};
+  if (!chunks.length) { req.rawBody = ''; return {}; }
   const text = Buffer.concat(chunks).toString('utf8');
+  req.rawBody = text;
   if (!text) return {};
   try {
     return JSON.parse(text);

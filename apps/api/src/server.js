@@ -20,6 +20,7 @@ import { applyRateLimit } from './utils/rateLimit.js';
 import { attachRequestContext, logRequest } from './utils/requestContext.js';
 import { registerAuthRoutes } from './routes/auth.js';
 import { registerMarketplaceWebhookRoutes } from './routes/marketplaceWebhooks.js';
+import { registerShopeeWebhookRoutes } from './routes/shopeeWebhook.js';
 import { registerShippingRuleRoutes } from './routes/shippingRules.js';
 import { registerApiCredentialRoutes } from './routes/apiCredentials.js';
 import { enforceAbuseProtection } from './utils/abuseProtection.js';
@@ -41,6 +42,7 @@ registerRecipientRoutes(app);
 registerLogRoutes(app);
 registerAuthRoutes(app);
 registerMarketplaceWebhookRoutes(app);
+registerShopeeWebhookRoutes(app);
 registerShippingRuleRoutes(app);
 registerApiCredentialRoutes(app);
 
