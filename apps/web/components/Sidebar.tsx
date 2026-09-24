@@ -8,7 +8,7 @@ const sections: { title: string; links: [string, string, string][] }[] = [
   {
     title: 'Operação',
     links: [
-      ['Painel', '/dashboard', 'dashboard'],
+      ['Torre de controle', '/dashboard', 'dashboard'],
       ['Pedidos', '/orders', 'orders'],
       ['Cotações', '/quotes', 'quotes'],
       ['Embarques', '/shipments', 'shipments'],
@@ -20,6 +20,7 @@ const sections: { title: string; links: [string, string, string][] }[] = [
     links: [
       ['Tabelas de frete', '/freight', 'freight'],
       ['Regras de frete', '/shipping-rules', 'rules'],
+      ['Financeiro de frete', '/financial', 'money'],
       ['Auditoria de frete', '/audit', 'audit']
     ]
   },

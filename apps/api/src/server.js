@@ -29,6 +29,7 @@ import { registerInvoiceRoutes } from './routes/invoices.js';
 import { registerCarrierMappingRoutes } from './routes/carrierMappings.js';
 import { registerIntegrationIssueRoutes } from './routes/integrationIssues.js';
 import { registerProductImportRoutes } from './routes/productImport.js';
+import { registerAnalyticsRoutes } from './routes/analytics.js';
 import { startSefazScheduler } from './services/cte/scheduler.js';
 import { enforceAbuseProtection } from './utils/abuseProtection.js';
 
@@ -59,6 +60,7 @@ registerInvoiceRoutes(app);
 registerCarrierMappingRoutes(app);
 registerIntegrationIssueRoutes(app);
 registerManualTrackingRoutes(app);
+registerAnalyticsRoutes(app);
 
 app.get('/health', async () => ({ ok: true }));
 
