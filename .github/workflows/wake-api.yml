@@ -1,0 +1,27 @@
+# Acorda a API do TMS (plano gratuito do Render "dorme" sem uso) nos horários da
+# busca automática de CT-es na SEFAZ: 08h e 14h de Brasília (11h e 17h UTC).
+# Ao acordar, a própria API executa a janela pendente — este job só faz a requisição.
+name: Acordar API (busca de CT-es)
+
+on:
+  schedule:
+    - cron: '5 11 * * *'
+    - cron: '5 17 * * *'
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  wake:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Chamar /health até a API responder
+        run: |
+          for i in 1 2 3 4 5 6; do
+            if curl -fsS --max-time 60 https://tms-api-pchl.onrender.com/health; then
+              echo " API acordada"; exit 0
+            fi
+            sleep 20
+          done
+          echo "API não respondeu"; exit 1

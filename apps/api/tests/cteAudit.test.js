@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import zlib from 'node:zlib';
 import forge from 'node-forge';
-import { parseCteXml, nfeNumberFromKey, gunzipBase64 } from '../src/services/cte/cteParser.js';
+import { parseCteXml, parseNfeXml, nfeNumberFromKey, gunzipBase64 } from '../src/services/cte/cteParser.js';
+import { dueSlot } from '../src/services/cte/scheduler.js';
 import { encryptSecret, decryptSecret } from '../src/services/cte/secretBox.js';
 import { inspectPfx } from '../src/services/cte/certificate.js';
 import { parseDistributionResponse } from '../src/services/cte/sefazDistribution.js';
@@ -20,7 +21,37 @@ const SAMPLE = `<?xml version="1.0" encoding="UTF-8"?>
 <infCTeNorm><infDoc><infNFe><chave>${NFE}</chave></infNFe></infDoc></infCTeNorm>
 </infCte></CTe><protCTe><infProt><chCTe>${CHAVE}</chCTe></infProt></protCTe></cteProc>`;
 
+const VENDA = '41260998765432000110550010000045671000045671';
+const REMESSA = '35260998765432000290550010000099881000099887';
+const NFE_REMESSA = `<nfeProc xmlns="http://www.portalfiscal.inf.br/nfe" versao="4.00"><NFe><infNFe Id="NFe${REMESSA}" versao="4.00">
+<ide><natOp>Remessa por conta e ordem de terceiros</natOp><serie>1</serie><nNF>9988</nNF><dhEmi>2026-09-20T09:00:00-03:00</dhEmi>
+<NFref><refNFe>${VENDA}</refNFe></NFref></ide>
+<emit><CNPJ>98765432000290</CNPJ><xNome>Lessul CD SP</xNome><enderEmit><UF>SP</UF></enderEmit></emit>
+<dest><CPF>12345678901</CPF><xNome>Maria</xNome><enderDest><UF>RS</UF></enderDest></dest>
+<det nItem="1"><prod><CFOP>5923</CFOP><xPed>PED-777</xPed></prod></det>
+<total><ICMSTot><vProd>1400.00</vProd><vNF>1500.00</vNF></ICMSTot></total>
+</infNFe></NFe></nfeProc>`;
+
 export function runCteAuditTests() {
+  // NF-e de remessa (triangulação) referenciando a NF de venda
+  const nf = parseNfeXml(NFE_REMESSA);
+  assert.equal(nf.chave, REMESSA);
+  assert.equal(nf.numero, '9988');
+  assert.equal(nf.emitenteUf, 'SP');
+  assert.equal(nf.destinoUf, 'RS');
+  assert.equal(nf.valorTotal, 1500);
+  assert.equal(nf.valorProdutos, 1400);
+  assert.equal(nf.cfop, '5923');
+  assert.equal(nf.pedidoReferencia, 'PED-777');
+  assert.deepEqual(nf.referencedKeys, [VENDA]);
+  assert.throws(() => parseNfeXml(SAMPLE));
+
+  // Janelas da busca automática (08h e 14h de Brasília)
+  assert.equal(dueSlot(new Date('2026-09-24T10:30:00Z'), [8, 14]), '2026-09-23@14');
+  assert.equal(dueSlot(new Date('2026-09-24T11:10:00Z'), [8, 14]), '2026-09-24@8');
+  assert.equal(dueSlot(new Date('2026-09-24T17:05:00Z'), [8, 14]), '2026-09-24@14');
+  assert.equal(dueSlot(new Date('2026-09-25T02:59:00Z'), [8, 14]), '2026-09-24@14');
+
   // Parser de CT-e
   const c = parseCteXml(SAMPLE);
   assert.equal(c.chave, CHAVE);

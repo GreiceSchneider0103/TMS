@@ -25,6 +25,8 @@ import { registerShopeeIntegrationRoutes } from './routes/shopeeIntegration.js';
 import { registerShippingRuleRoutes } from './routes/shippingRules.js';
 import { registerApiCredentialRoutes } from './routes/apiCredentials.js';
 import { registerFreightAuditRoutes } from './routes/freightAudit.js';
+import { registerInvoiceRoutes } from './routes/invoices.js';
+import { startSefazScheduler } from './services/cte/scheduler.js';
 import { enforceAbuseProtection } from './utils/abuseProtection.js';
 
 const app = router();
@@ -49,6 +51,7 @@ registerShopeeIntegrationRoutes(app);
 registerShippingRuleRoutes(app);
 registerApiCredentialRoutes(app);
 registerFreightAuditRoutes(app);
+registerInvoiceRoutes(app);
 
 app.get('/health', async () => ({ ok: true }));
 
@@ -92,4 +95,5 @@ const server = http.createServer(async (req, res) => {
 
 server.listen(process.env.PORT || 3001, () => {
   console.log('TMS API running');
+  startSefazScheduler();
 });

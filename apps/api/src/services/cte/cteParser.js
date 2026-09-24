@@ -8,7 +8,8 @@ const parser = new XMLParser({
   parseTagValue: false, // chaves e CNPJs têm muitos dígitos: manter como texto
   parseAttributeValue: false,
   trimValues: true,
-  isArray: (name) => ['infNFe', 'docZip', 'infNF', 'infOutros', 'Comp'].includes(name)
+  // infNFe só é lista dentro do CT-e (NFs transportadas); na NF-e é o elemento principal.
+  isArray: (name, jpath) => (name === 'infNFe' ? String(jpath).endsWith('infDoc.infNFe') : ['docZip', 'infNF', 'infOutros', 'Comp', 'NFref', 'det'].includes(name))
 });
 
 export function parseXml(xml) {
@@ -68,4 +69,41 @@ export function parseCteXml(xml) {
 export function nfeNumberFromKey(chave) {
   const s = String(chave || '');
   return s.length === 44 ? String(Number(s.slice(25, 34))) : null;
+}
+
+// Extrai os dados de uma NF-e (nfeProc ou NFe). referencedKeys traz as NF-es citadas em NFref:
+// numa triangulação, a NF de remessa do CD referencia a NF de venda.
+export function parseNfeXml(xml) {
+  const doc = parseXml(xml);
+  const nfe = doc.nfeProc?.NFe || doc.NFe;
+  const inf = nfe?.infNFe;
+  if (!inf) throw new Error('XML não é uma NF-e válida (infNFe não encontrado).');
+
+  const chave = String(inf['@_Id'] || '').replace(/^NFe/, '') || text(pick(doc, 'nfeProc', 'protNFe', 'infProt', 'chNFe'));
+  if (!/^\d{44}$/.test(chave || '')) throw new Error('Chave da NF-e não encontrada no XML.');
+
+  const ide = inf.ide || {};
+  const dets = inf.det || [];
+  const docOf = (p) => text(p?.CNPJ) || text(p?.CPF) || null;
+  const referencedKeys = (ide.NFref || []).map((r) => text(r.refNFe)).filter(Boolean);
+  const pedido = text(inf.compra?.xPed) || text(dets[0]?.prod?.xPed) || null;
+
+  return {
+    chave,
+    numero: text(ide.nNF),
+    serie: text(ide.serie),
+    dataEmissao: text(ide.dhEmi) || text(ide.dEmi),
+    naturezaOperacao: text(ide.natOp),
+    emitenteCnpj: docOf(inf.emit),
+    emitenteNome: text(inf.emit?.xNome),
+    emitenteUf: text(inf.emit?.enderEmit?.UF),
+    destinatarioDocumento: docOf(inf.dest),
+    destinatarioNome: text(inf.dest?.xNome),
+    destinoUf: text(inf.dest?.enderDest?.UF),
+    valorTotal: num(inf.total?.ICMSTot?.vNF),
+    valorProdutos: num(inf.total?.ICMSTot?.vProd),
+    cfop: text(dets[0]?.prod?.CFOP),
+    pedidoReferencia: pedido,
+    referencedKeys
+  };
 }
