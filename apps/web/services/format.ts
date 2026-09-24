@@ -65,14 +65,20 @@ const STATUS: Record<string, [string, Tone]> = {
   retry: ['Nova tentativa', 'warning'],
   rejected: ['Rejeitado', 'error'],
   active: ['Ativo', 'success'],
-  inactive: ['Inativo', 'neutral']
+  inactive: ['Inativo', 'neutral'],
+  conciliado: ['Conciliado', 'success'],
+  pago_acima: ['Pago acima', 'error'],
+  pago_abaixo: ['Pago abaixo', 'warning'],
+  sem_cte: ['Sem CT-e', 'neutral'],
+  sem_cotacao: ['Sem cotação', 'warning']
 };
 
 // Rótulos que já chegam em português (ex.: "Ativa", "Revogada") mantêm o texto e só ganham a cor.
 const PT_TONES: Record<string, Tone> = {
   ativa: 'success', ativo: 'success', aprovado: 'success', selecionada: 'success', conectada: 'success', publicada: 'success', entregue: 'success',
   pendente: 'warning', rascunho: 'warning', sandbox: 'warning', 'em desenvolvimento': 'warning', 'produção': 'success', 'disponível': 'neutral', 'em trânsito': 'warning', 'não implementada': 'warning',
-  inativa: 'neutral', inativo: 'neutral', revogada: 'error', erro: 'error', desconectada: 'error'
+  inativa: 'neutral', inativo: 'neutral', revogada: 'error', erro: 'error', desconectada: 'error',
+  'válido': 'success', vencido: 'error', 'sem certificado': 'neutral', 'sem vínculo': 'warning'
 };
 
 export function statusInfo(status: unknown): { label: string; tone: Tone } {
@@ -85,7 +91,7 @@ export function statusInfo(status: unknown): { label: string; tone: Tone } {
 
 export const ORDER_STATUS_OPTIONS = ['READY_FOR_QUOTE', 'QUOTED', 'DISPATCHED', 'IN_TRANSIT', 'OUT_FOR_DELIVERY', 'DELIVERED', 'EXCEPTION', 'RETURNED', 'CANCELED'];
 
-const CHANNELS: Record<string, string> = { shopee: 'Shopee', tiny: 'Tiny ERP', magalu: 'Magalu', manual: 'Manual' };
+const CHANNELS: Record<string, string> = { shopee: 'Shopee', tiny: 'Tiny ERP', magalu: 'Magalu', manual: 'Manual', mercadolivre: 'Mercado Livre', site: 'Site próprio' };
 export function channelLabel(channel: unknown): string {
   const c = String(channel || '').toLowerCase();
   return CHANNELS[c] || (c ? c.charAt(0).toUpperCase() + c.slice(1) : '-');
@@ -106,6 +112,12 @@ const EVENT_LABELS: Record<string, string> = {
   tiny_import: 'Importação Tiny',
   create_shipment: 'Criação de embarque',
   import_draft: 'Importação de tabela',
+  sefaz_sync: 'Consulta de CT-es na SEFAZ',
+  upload: 'Envio',
+  link: 'Vínculo',
+  unlink: 'Remoção de vínculo',
+  cte: 'CT-e',
+  company_certificate: 'Certificado digital',
   tracking_webhook: 'Evento de rastreio',
   create: 'Criação',
   update: 'Alteração',

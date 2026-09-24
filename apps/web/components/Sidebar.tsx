@@ -19,15 +19,15 @@ const sections: { title: string; links: [string, string, string][] }[] = [
     title: 'Frete',
     links: [
       ['Tabelas de frete', '/freight', 'freight'],
-      ['Regras de frete', '/shipping-rules', 'rules']
+      ['Regras de frete', '/shipping-rules', 'rules'],
+      ['Auditoria de frete', '/audit', 'audit']
     ]
   },
   {
     title: 'Administração',
     links: [
       ['Cadastros', '/cadastros', 'registry'],
-      ['Auditoria', '/audit', 'audit'],
-      ['Histórico de integrações', '/logs', 'logs'],
+      ['Logs', '/logs', 'logs'],
       ['Configurações', '/settings', 'settings']
     ]
   }

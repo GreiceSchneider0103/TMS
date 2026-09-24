@@ -2,7 +2,6 @@
 import { useMemo, useState } from 'react';
 import { useApi } from '@/hooks/useApi';
 import { api } from '@/services/api';
-import { PageHeader } from '@/components/ui/PageHeader';
 import { Panel } from '@/components/ui/Panel';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { LoadingState } from '@/components/ui/LoadingState';
@@ -12,7 +11,7 @@ import { Icon } from '@/components/ui/Icon';
 import { downloadCsv } from '@/services/csv';
 import { eventLabel, formatDateTime, summarizeData } from '@/services/format';
 
-export default function AuditPage() {
+export function AuditTrail() {
   const [entityFilter, setEntityFilter] = useState('all');
   const [actionFilter, setActionFilter] = useState('all');
   const [date, setDate] = useState('');
@@ -40,12 +39,8 @@ export default function AuditPage() {
 
   return (
     <div className="grid">
-      <PageHeader
-        title="Auditoria"
-        subtitle="Registro das ações realizadas no sistema"
-        actions={<button className="btn" disabled={!filtered.length} onClick={exportCsv}><Icon name="download" />Exportar</button>}
-      />
-      <Panel title="Eventos" subtitle={loading ? undefined : `${filtered.length} evento(s)`} right={<button className="btn sm" onClick={reload}><Icon name="refresh" />Atualizar</button>}>
+      <div className="form-actions"><button className="btn" disabled={!filtered.length} onClick={exportCsv}><Icon name="download" />Exportar</button></div>
+      <Panel title="Ações realizadas no sistema" subtitle={loading ? undefined : `${filtered.length} evento(s)`} right={<button className="btn sm" onClick={reload}><Icon name="refresh" />Atualizar</button>}>
         <div className="filter-row">
           <Field label="Registro">
             <select className="select" value={entityFilter} onChange={(e) => setEntityFilter(e.target.value)}>

@@ -57,7 +57,7 @@ export default function DashboardPage() {
           )}
         </Panel>
 
-        <Panel title="Últimas sincronizações" subtitle="Integrações com ERP e marketplaces" right={<Link className="btn ghost sm" href="/logs">Ver histórico</Link>}>
+        <Panel title="Últimas sincronizações" subtitle="Integrações com ERP e marketplaces" right={<Link className="btn ghost sm" href="/logs?tab=integracoes">Ver histórico</Link>}>
           {sync.loading ? <LoadingState /> : sync.error ? <EmptyState text="Histórico indisponível para o seu perfil de acesso." /> : jobs.length === 0 ? <EmptyState text="Nenhuma sincronização recente." /> : (
             <div className="table-wrap">
               <table>

@@ -2,7 +2,6 @@
 import { useState } from 'react';
 import { useApi } from '@/hooks/useApi';
 import { api } from '@/services/api';
-import { PageHeader } from '@/components/ui/PageHeader';
 import { Panel } from '@/components/ui/Panel';
 import { StatCard } from '@/components/ui/StatCard';
 import { StatusBadge } from '@/components/ui/StatusBadge';
@@ -21,7 +20,7 @@ function bucket(status: unknown): 'ok' | 'pending' | 'error' {
   return 'pending';
 }
 
-export default function LogsPage() {
+export function IntegrationLogs() {
   const [statusFilter, setStatusFilter] = useState('all');
   const sync = useApi(() => api('/logs/sync?limit=100'), []);
   const hooks = useApi(() => api('/logs/webhooks?limit=100'), []);
@@ -36,7 +35,7 @@ export default function LogsPage() {
 
   return (
     <div className="grid">
-      <PageHeader title="Histórico de integrações" subtitle="Sincronizações com ERP e notificações recebidas dos marketplaces" actions={<button className="btn" onClick={refresh}><Icon name="refresh" />Atualizar</button>} />
+      <div className="form-actions"><button className="btn" onClick={refresh}><Icon name="refresh" />Atualizar</button></div>
 
       <div className="kpi-grid">
         <StatCard title="Total de registros" value={all.length} />
