@@ -70,7 +70,10 @@ const STATUS: Record<string, [string, Tone]> = {
   pago_acima: ['Pago acima', 'error'],
   pago_abaixo: ['Pago abaixo', 'warning'],
   sem_cte: ['Sem CT-e', 'neutral'],
-  sem_cotacao: ['Sem cotação', 'warning']
+  sem_cotacao: ['Sem cotação', 'warning'],
+  venda: ['Venda', 'info'],
+  remessa: ['Remessa (triangulação)', 'warning'],
+  outra: ['Outra', 'neutral']
 };
 
 // Rótulos que já chegam em português (ex.: "Ativa", "Revogada") mantêm o texto e só ganham a cor.
@@ -78,7 +81,7 @@ const PT_TONES: Record<string, Tone> = {
   ativa: 'success', ativo: 'success', aprovado: 'success', selecionada: 'success', conectada: 'success', publicada: 'success', entregue: 'success',
   pendente: 'warning', rascunho: 'warning', sandbox: 'warning', 'em desenvolvimento': 'warning', 'produção': 'success', 'disponível': 'neutral', 'em trânsito': 'warning', 'não implementada': 'warning',
   inativa: 'neutral', inativo: 'neutral', revogada: 'error', erro: 'error', desconectada: 'error',
-  'válido': 'success', vencido: 'error', 'sem certificado': 'neutral', 'sem vínculo': 'warning'
+  'válido': 'success', vencido: 'error', 'sem certificado': 'neutral', 'sem vínculo': 'warning', 'sem pedido': 'warning', recebido: 'success'
 };
 
 export function statusInfo(status: unknown): { label: string; tone: Tone } {
@@ -118,6 +121,8 @@ const EVENT_LABELS: Record<string, string> = {
   unlink: 'Remoção de vínculo',
   cte: 'CT-e',
   company_certificate: 'Certificado digital',
+  order_invoice: 'Nota fiscal',
+  shopee_invoice: 'Envio de NF à Shopee',
   tracking_webhook: 'Evento de rastreio',
   create: 'Criação',
   update: 'Alteração',

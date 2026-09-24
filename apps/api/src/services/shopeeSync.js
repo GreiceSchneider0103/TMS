@@ -1,3 +1,4 @@
+import { HttpError } from '../utils/router.js';
 import { query, transaction } from '../db.js';
 import { ShopeeClient } from './shopeeClient.js';
 import { createAndCalculateQuote, hashRequest } from '../routes/quotes.js';
@@ -148,7 +149,7 @@ async function tryAutoQuote({ accountId, order, correlationId }) {
   return true;
 }
 
-export async function dispatchShopeeOrder({ accountId, orderId, correlationId }) {
+async function loadShopeeOrderContext(accountId, orderId) {
   const orderRes = await query('select * from app.orders where account_id = $1 and id = $2', [accountId, orderId]);
   const order = orderRes.rows[0];
   if (!order) throw new Error('Order not found');
@@ -164,6 +165,55 @@ export async function dispatchShopeeOrder({ accountId, orderId, correlationId })
 
   const client = new ShopeeClient({ isSandbox: shop.is_sandbox });
   const accessToken = await getValidAccessToken(shop);
+  return { order, orderSn, shop, client, accessToken };
+}
+
+// Envia à Shopee os dados da NF-e de venda do pedido (obrigatório no Brasil antes do envio).
+export async function sendShopeeInvoice({ accountId, orderId, context = null }) {
+  const { orderSn, shop, client, accessToken } = context || await loadShopeeOrderContext(accountId, orderId);
+  const inv = await query(
+    `select id, chave, numero, serie, data_emissao, valor_total, valor_produtos, cfop from app.order_invoices
+     where account_id = $1 and order_id = $2 and kind = 'venda' order by data_emissao desc nulls last limit 1`,
+    [accountId, orderId]
+  );
+  const nf = inv.rows[0];
+  if (!nf) throw new HttpError(400, 'Este pedido não tem NF-e de venda cadastrada.');
+
+  await client.shopRequest('/api/v2/order/add_invoice_data', {
+    method: 'POST',
+    accessToken,
+    shopId: shop.shop_id,
+    body: {
+      order_sn: orderSn,
+      invoice_data: {
+        number: String(nf.numero || ''),
+        series_number: String(nf.serie || ''),
+        access_key: nf.chave,
+        issue_date: nf.data_emissao ? Math.floor(new Date(nf.data_emissao).getTime() / 1000) : Math.floor(Date.now() / 1000),
+        total_value: Number(nf.valor_total || 0),
+        products_total_value: Number(nf.valor_produtos ?? nf.valor_total ?? 0),
+        tax_code: String(nf.cfop || '')
+      }
+    }
+  });
+  await query('update app.order_invoices set shopee_sent_at = now(), updated_at = now() where account_id = $1 and id = $2', [accountId, nf.id]);
+  return { sent: true, invoiceNumber: nf.numero };
+}
+
+export async function dispatchShopeeOrder({ accountId, orderId, correlationId }) {
+  const context = await loadShopeeOrderContext(accountId, orderId);
+  const { orderSn, shop, client, accessToken } = context;
+
+  // Se houver NF de venda ainda não enviada, envia antes de despachar. Falha aqui não bloqueia o despacho.
+  let invoiceWarning = null;
+  const pendingNf = await query("select 1 from app.order_invoices where account_id = $1 and order_id = $2 and kind = 'venda' and shopee_sent_at is null limit 1", [accountId, orderId]);
+  if (pendingNf.rows[0]) {
+    try {
+      await sendShopeeInvoice({ accountId, orderId, context });
+    } catch (error) {
+      invoiceWarning = `NF não enviada à Shopee: ${error.message}`;
+    }
+  }
 
   const paramRes = await client.shopRequest('/api/v2/logistics/get_shipping_parameter', {
     accessToken,
@@ -223,5 +273,5 @@ export async function dispatchShopeeOrder({ accountId, orderId, correlationId })
     return row;
   });
 
-  return { shipment, trackingCode, correlationId };
+  return { shipment, trackingCode, invoiceWarning, correlationId };
 }

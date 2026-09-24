@@ -1,7 +1,7 @@
 import { query } from '../db.js';
 import { requireAnyRole } from '../utils/context.js';
 import { ShopeeClient } from '../services/shopeeClient.js';
-import { getActiveShopeeShops, syncShopOrders, dispatchShopeeOrder } from '../services/shopeeSync.js';
+import { getActiveShopeeShops, syncShopOrders, dispatchShopeeOrder, sendShopeeInvoice } from '../services/shopeeSync.js';
 import { logAudit } from '../services/audit.js';
 
 const REDIRECT_BASE_URL = process.env.SHOPEE_REDIRECT_BASE_URL || 'https://tms-api-pchl.onrender.com';
@@ -72,6 +72,12 @@ export function registerShopeeIntegrationRoutes(app) {
 
     await logAudit({ accountId: ctx.accountId, userId: ctx.userId, entity: 'shopee_sync', entityId: ctx.accountId, action: 'sync', afterData: { synced, quoted, shops: shops.length }, correlationId: ctx.correlationId });
     return { synced, quoted, shops: shops.length, correlationId: ctx.correlationId };
+  }));
+
+  app.post('/integrations/shopee/orders/:orderId/invoice', requireAnyRole(['admin', 'operador_logistico'], async ({ ctx, params }) => {
+    const result = await sendShopeeInvoice({ accountId: ctx.accountId, orderId: params.orderId });
+    await logAudit({ accountId: ctx.accountId, userId: ctx.userId, entity: 'order_invoice', entityId: params.orderId, action: 'shopee_invoice', afterData: { numero: result.invoiceNumber }, correlationId: ctx.correlationId });
+    return { ...result, correlationId: ctx.correlationId };
   }));
 
   app.post('/integrations/shopee/orders/:orderId/dispatch', requireAnyRole(['admin', 'operador_logistico'], async ({ ctx, params }) => {

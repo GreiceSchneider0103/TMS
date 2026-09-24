@@ -43,7 +43,7 @@ export function Reconciliation({ onGoToCtes }: { onGoToCtes: () => void }) {
     downloadCsv('auditoria-frete.csv', filtered.map((i) => ({
       Pedido: i.order_number, Canal: channelLabel(i.channel), Transportadora: i.carrier_name || '', Data: formatDate(i.created_at),
       'Frete cobrado': n(i.charged), 'Frete contratado': n(i.contracted), 'Frete pago (CT-e)': n(i.paid),
-      'Pago - contratado': n(i.paid_vs_contracted), 'Margem (cobrado - pago)': n(i.margin), 'CT-e': i.cte_numbers || '', Situação: statusInfo(i.audit_status).label
+      'Pago - contratado': n(i.paid_vs_contracted), 'Margem (cobrado - pago)': n(i.margin), 'NF': i.invoice_numbers || '', 'CT-e': i.cte_numbers || '', Situação: statusInfo(i.audit_status).label
     })));
   }
 
@@ -95,7 +95,7 @@ export function Reconciliation({ onGoToCtes }: { onGoToCtes: () => void }) {
                   <tr key={i.shipment_id}>
                     <td className="cell-title">
                       <Link href={`/shipments/${i.shipment_id}`} style={{ color: 'var(--brand)', fontWeight: 600 }}>#{i.order_number}</Link>
-                      <span className="sub">{channelLabel(i.channel)} · {formatDate(i.created_at)}{i.cte_numbers ? ` · CT-e ${i.cte_numbers}` : ''}</span>
+                      <span className="sub">{channelLabel(i.channel)} · {formatDate(i.created_at)}{i.invoice_numbers ? ` · NF ${i.invoice_numbers}` : ''}{i.cte_numbers ? ` · CT-e ${i.cte_numbers}` : ''}</span>
                     </td>
                     <td data-label="Transportadora">{i.carrier_name || '-'}</td>
                     <td data-label="Cobrado" className="text-right nowrap">{money(i.charged)}</td>
