@@ -21,8 +21,8 @@ export function registerCarrierRoutes(app) {
     if (existing.rows[0]) return { ...existing.rows[0], reused: true, correlationId: ctx.correlationId };
 
     const { rows } = await query(
-      'insert into app.carriers(account_id, name, external_name, priority, is_active) values($1,$2,$3,$4,$5) returning *',
-      [ctx.accountId, payload.name, payload.externalName || null, payload.priority, payload.isActive]
+      'insert into app.carriers(account_id, name, external_name, priority, is_active, cnpj) values($1,$2,$3,$4,$5,$6) returning *',
+      [ctx.accountId, payload.name, payload.externalName || null, payload.priority, payload.isActive, payload.cnpj || null]
     );
     return { ...rows[0], correlationId: ctx.correlationId };
   }));
@@ -33,8 +33,8 @@ export function registerCarrierRoutes(app) {
 
     const { rows } = await query(
       `update app.carriers set name = coalesce($3, name), external_name = coalesce($4, external_name), priority = coalesce($5, priority),
-       is_active = coalesce($6, is_active), updated_at = now() where account_id = $1 and id = $2 and deleted_at is null returning *`,
-      [ctx.accountId, params.id, payload.name, payload.externalName, payload.priority, payload.isActive]
+       is_active = coalesce($6, is_active), cnpj = coalesce($7, cnpj), updated_at = now() where account_id = $1 and id = $2 and deleted_at is null returning *`,
+      [ctx.accountId, params.id, payload.name, payload.externalName, payload.priority, payload.isActive, payload.cnpj]
     );
     if (!rows[0]) throw new Error('Carrier not found');
     return { ...rows[0], correlationId: ctx.correlationId };
@@ -51,7 +51,8 @@ function normalizeCarrierInput(body = {}, { partial = false } = {}) {
     name: body.name !== undefined ? String(body.name || '').trim() : undefined,
     externalName: body.externalName !== undefined ? String(body.externalName || '').trim() : undefined,
     priority: body.priority !== undefined ? Number(body.priority) : (partial ? undefined : 100),
-    isActive: body.isActive ?? (partial ? undefined : true)
+    isActive: body.isActive ?? (partial ? undefined : true),
+    cnpj: body.cnpj !== undefined ? String(body.cnpj || '').replace(/\D/g, '') : undefined
   };
 }
 
