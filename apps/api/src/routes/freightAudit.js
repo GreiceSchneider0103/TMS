@@ -135,7 +135,7 @@ export function registerFreightAuditRoutes(app) {
               o.id as order_id, o.order_number, o.channel,
               c.name as carrier_name,
               o.shipping_amount as charged,
-              qr.total_amount as contracted,
+              coalesce(qr.total_amount, s.freight_amount) as contracted,
               ct.paid, ct.cte_count, ct.cte_numbers,
               (select string_agg(oi.numero || case when oi.kind = 'remessa' then ' (remessa)' else '' end, ', ' order by oi.kind desc)
                  from app.order_invoices oi where oi.account_id = $1 and oi.order_id = o.id) as invoice_numbers
@@ -148,6 +148,7 @@ export function registerFreightAuditRoutes(app) {
          from app.ctes x where x.account_id = $1 and x.shipment_id = s.id
        ) ct on true
        where s.account_id = $1 and s.created_at::date between $2 and $3
+         and not o.ignore_cost and not o.integration_ignored -- frete gerenciado pelo canal (de-para)
        order by s.created_at desc limit 1000`,
       [ctx.accountId, from, to]
     );

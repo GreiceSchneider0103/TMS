@@ -13,6 +13,7 @@ import { ErrorState } from '@/components/ui/ErrorState';
 import { Field } from '@/components/ui/Field';
 import { Icon } from '@/components/ui/Icon';
 import { downloadCsv } from '@/services/csv';
+import { deadlineInfo } from '@/services/deadlines';
 import { ORDER_STATUS_OPTIONS, channelLabel, formatCep, formatDate, formatMoney, statusInfo } from '@/services/format';
 
 export function OrdersList() {
@@ -119,6 +120,7 @@ export function OrdersList() {
                   <th>Transportadora</th>
                   <th className="text-right">Valor</th>
                   <th>Situação</th>
+                  <th>Prazo</th>
                   <th>Data</th>
                   <th></th>
                 </tr>
@@ -135,6 +137,7 @@ export function OrdersList() {
                     <td data-label="Transportadora">{o.carrier_name || '-'}</td>
                     <td data-label="Valor" className="text-right nowrap">{formatMoney(o.total_amount)}</td>
                     <td data-label="Situação"><StatusBadge status={o.status} /></td>
+                    <td data-label="Prazo">{(() => { const d = deadlineInfo(o); return d ? <span className={`badge ${d.tone}`}>{d.label}</span> : '-'; })()}</td>
                     <td data-label="Data" className="nowrap">{formatDate(o.created_at)}</td>
                     <td data-label="" className="text-right">
                       <div className="row-actions">{actionFor(o)}</div>

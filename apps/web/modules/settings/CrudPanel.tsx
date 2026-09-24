@@ -1,5 +1,7 @@
 'use client';
 import { useMemo, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
+import { ProductImport } from './ProductImport';
 import { api } from '@/services/api';
 import { useApi } from '@/hooks/useApi';
 import { PageHeader } from '@/components/ui/PageHeader';
@@ -11,10 +13,11 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { Field } from '@/components/ui/Field';
 import { Modal } from '@/components/ui/Modal';
 import { Icon } from '@/components/ui/Icon';
-import { formatCep, formatDocument, formatNumber } from '@/services/format';
+import { channelLabel, formatCep, formatDocument, formatNumber } from '@/services/format';
+import { CHANNEL_OPTIONS } from '@/services/brazil';
 
 type Row = Record<string, any>;
-type Lookups = { companies: Row[]; carriers: Row[] };
+type Lookups = { companies: Row[]; carriers: Row[]; services: Row[] };
 
 type FieldDef = {
   key: string; // nome do campo enviado para a API
@@ -61,6 +64,24 @@ const RESOURCES: Resource[] = [
       { label: 'Nome nas tabelas', render: (r) => r.external_name || '-' },
       { label: 'Prioridade', render: (r) => r.priority, right: true },
       { label: 'Situação', render: active }
+    ]
+  },
+  {
+    key: 'carrier-mappings', label: 'De-para de transportadoras', singular: 'de-para',
+    fields: [
+      { key: 'sourceName', from: 'source_name', label: 'Nome recebido do canal', required: true, full: true, hint: 'Exatamente como vem no pedido do marketplace/ERP (ex.: RODONAVES TRANSPS E ENCOMENDAS LTDA, Mercado Envios)' },
+      { key: 'sourceService', from: 'source_service', label: 'Serviço recebido', hint: 'Opcional — para diferenciar serviços da mesma transportadora' },
+      { key: 'channel', from: 'channel', label: 'Canal', type: 'select', options: CHANNEL_OPTIONS.map((c) => [c.value, c.label] as [string, string]), hint: 'Em branco = todos os canais' },
+      { key: 'carrierId', from: 'carrier_id', label: 'Transportadora no TMS', type: 'select', options: (l) => l.carriers.map((c) => [c.id, c.name]) },
+      { key: 'carrierServiceId', from: 'carrier_service_id', label: 'Serviço no TMS', type: 'select', options: (l) => l.services.map((sv) => [sv.id, `${l.carriers.find((c) => c.id === sv.carrier_id)?.name || ''} · ${sv.name}`]) },
+      { key: 'ignoreIntegration', from: 'ignore_integration', label: 'Ignorar integração (frete feito pelo canal: Mercado Envios, Fulfillment...)', type: 'checkbox', defaultValue: 'false', full: true },
+      { key: 'ignoreCost', from: 'ignore_cost', label: 'Não considerar o custo na auditoria de frete', type: 'checkbox', defaultValue: 'false', full: true }
+    ],
+    columns: [
+      { label: 'Nome recebido', render: (r) => <>{r.source_name}{r.source_service ? <span className="sub">{r.source_service}</span> : null}</> },
+      { label: 'Canal', render: (r) => (r.channel ? channelLabel(r.channel) : 'Todos') },
+      { label: 'Transportadora no TMS', render: (r) => (r.ignore_integration ? <StatusBadge status="Ignorado" /> : <>{r.carrier_name || '-'}{r.carrier_service_name ? <span className="sub">{r.carrier_service_name}</span> : null}</>) },
+      { label: 'Custo na auditoria', render: (r) => (r.ignore_cost || r.ignore_integration ? 'Não considera' : 'Considera') }
     ]
   },
   {
@@ -152,15 +173,19 @@ const RESOURCES: Resource[] = [
 ];
 
 export function CrudPanel() {
-  const [resourceKey, setResourceKey] = useState(RESOURCES[0].key);
-  const [editing, setEditing] = useState<Row | null>(null);
+  // Permite abrir direto uma aba e um cadastro pré-preenchido (ex.: "Criar de-para" a partir de uma pendência).
+  const params = useSearchParams();
+  const initialTab = RESOURCES.some((r) => r.key === params.get('tab')) ? String(params.get('tab')) : RESOURCES[0].key;
+  const [resourceKey, setResourceKey] = useState(initialTab);
+  const [editing, setEditing] = useState<Row | null>(() => (params.get('novo') ? { source_name: params.get('novo'), channel: params.get('canal') || null } : null));
   const [search, setSearch] = useState('');
   const [feedback, setFeedback] = useState<{ ok: boolean; text: string } | null>(null);
   const resource = RESOURCES.find((r) => r.key === resourceKey)!;
   const list = useApi(() => api(`/${resource.key}`), [resource.key]);
   const companies = useApi(() => api('/companies'), []);
   const carriers = useApi(() => api('/carriers'), []);
-  const lookups: Lookups = { companies: (companies.data as any)?.items || [], carriers: (carriers.data as any)?.items || [] };
+  const services = useApi(() => api('/carrier-services'), []);
+  const lookups: Lookups = { companies: (companies.data as any)?.items || [], carriers: (carriers.data as any)?.items || [], services: (services.data as any)?.items || [] };
 
   const rows: Row[] = useMemo(() => {
     const items: Row[] = (list.data as any)?.items || [];
@@ -200,6 +225,8 @@ export function CrudPanel() {
       </div>
 
       {feedback ? <div className={`notice ${feedback.ok ? 'ok' : 'err'}`}>{feedback.text}</div> : null}
+
+      {resource.key === 'products' ? <ProductImport onImported={list.reload} /> : null}
 
       <Panel title={resource.label} subtitle={list.loading ? undefined : `${rows.length} registro(s)`} right={<button className="btn sm" onClick={list.reload}><Icon name="refresh" />Atualizar</button>}>
         <div className="filter-row">
@@ -242,11 +269,12 @@ export function CrudPanel() {
 
 function RecordModal({ resource, row, lookups, onClose, onSaved }: { resource: Resource; row: Row; lookups: Lookups; onClose: () => void; onSaved: (text: string) => void }) {
   const isNew = !row.id;
+  const reprocessMsg = (saved: any) => (saved?.reprocessed ? ` ${saved.reprocessed} pedido(s) pendente(s) reprocessado(s).` : '');
   const [form, setForm] = useState<Record<string, any>>(() => {
     const initial: Record<string, any> = {};
     for (const f of resource.fields) {
       const v = row[f.from];
-      initial[f.key] = f.type === 'checkbox' ? v !== false : v == null ? f.defaultValue ?? '' : String(v);
+      initial[f.key] = f.type === 'checkbox' ? (v === undefined || v === null ? f.defaultValue !== 'false' : v !== false) : v == null ? f.defaultValue ?? '' : String(v);
     }
     return initial;
   });
@@ -289,7 +317,7 @@ function RecordModal({ resource, row, lookups, onClose, onSaved }: { resource: R
       if (hasLogistics) {
         await api('/product-logistics', { method: 'POST', body: JSON.stringify({ productId: saved.id || row.id, ...logistics }) });
       }
-      onSaved(saved?.reused ? `Já existia ${g(resource, 'um', 'uma')} ${resource.singular} com esses dados — o cadastro existente foi mantido.` : `${capitalize(resource.singular)} ${g(resource, 'salvo', 'salva')} com sucesso.`);
+      onSaved(saved?.reused ? `Já existia ${g(resource, 'um', 'uma')} ${resource.singular} com esses dados — o cadastro existente foi mantido.` : `${capitalize(resource.singular)} ${g(resource, 'salvo', 'salva')} com sucesso.${reprocessMsg(saved)}`);
     } catch (e: any) {
       setError(e.message);
     } finally {
@@ -301,7 +329,7 @@ function RecordModal({ resource, row, lookups, onClose, onSaved }: { resource: R
     const opts = typeof f.options === 'function' ? f.options(lookups) : f.options || [];
     if (f.type === 'checkbox') {
       return (
-        <label key={f.key} className="check" style={{ alignSelf: 'end' }}>
+        <label key={f.key} className={`check ${f.full ? 'full' : ''}`} style={{ alignSelf: 'end' }}>
           <input type="checkbox" checked={Boolean(form[f.key])} onChange={(e) => set(f.key, e.target.checked)} />
           {f.label}
         </label>

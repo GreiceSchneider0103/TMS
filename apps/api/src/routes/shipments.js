@@ -2,6 +2,8 @@ import crypto from 'node:crypto';
 import { query, transaction } from '../db.js';
 import { requireAnyRole } from '../utils/context.js';
 import { logAudit } from '../services/audit.js';
+import { HttpError } from '../utils/router.js';
+import { addBusinessDays } from '../services/deadlines.js';
 
 export function registerShipmentRoutes(app) {
   app.get('/shipments', requireAnyRole(['operador_logistico', 'financeiro', 'visualizador'], async ({ ctx }) => {
@@ -18,7 +20,7 @@ export function registerShipmentRoutes(app) {
 
   app.get('/shipments/:id', requireAnyRole(['operador_logistico', 'financeiro', 'visualizador'], async ({ ctx, params }) => {
     const shipment = await query(
-      `select s.*, c.name as carrier_name, o.order_number, o.channel, qr.total_amount as freight_amount, qr.total_days
+      `select s.*, c.name as carrier_name, o.order_number, o.channel, qr.total_amount as quoted_amount, qr.total_days
        from app.shipments s
        left join app.carriers c on c.id = s.carrier_id
        left join app.orders o on o.id = s.order_id
@@ -58,10 +60,12 @@ export function registerShipmentRoutes(app) {
       let shipment;
       try {
         const ins = await client.query(
-          `insert into app.shipments(account_id, order_id, quote_result_id, carrier_id, carrier_service_id, tracking_code, invoice_number, cte_number, status, idempotency_key)
-           values($1,$2,$3,$4,$5,$6,$7,$8,'DISPATCHED',$9)
+          `insert into app.shipments(account_id, order_id, quote_result_id, carrier_id, carrier_service_id, tracking_code, invoice_number, cte_number, status, idempotency_key,
+             dispatched_at, transit_days, estimated_delivery_date)
+           values($1,$2,$3,$4,$5,$6,$7,$8,'DISPATCHED',$9, now(), $10, $11)
            returning *`,
-          [ctx.accountId, body.orderId, body.quoteResultId, q.carrier_id, body.carrierServiceId || null, body.trackingCode || null, body.invoiceNumber || null, body.cteNumber || null, idempotencyKey]
+          [ctx.accountId, body.orderId, body.quoteResultId, q.carrier_id, body.carrierServiceId || null, body.trackingCode || null, body.invoiceNumber || null, body.cteNumber || null, idempotencyKey,
+            q.total_days ?? null, q.total_days != null ? addBusinessDays(new Date(), q.total_days) : null]
         );
         shipment = ins.rows[0];
       } catch (error) {
@@ -91,6 +95,52 @@ export function registerShipmentRoutes(app) {
     });
 
     await logAudit({ accountId: ctx.accountId, userId: ctx.userId, entity: 'shipment', entityId: result.id, action: 'create_shipment', afterData: { ...body, idempotencyKey }, correlationId: ctx.correlationId });
+    return { ...result, correlationId: ctx.correlationId };
+  }));
+}
+
+// Atualização manual de rastreio (transportadoras sem integração por API).
+const MANUAL_STATUSES = {
+  IN_TRANSIT: 'Em trânsito',
+  OUT_FOR_DELIVERY: 'Saiu para entrega',
+  DELIVERED: 'Entregue',
+  EXCEPTION: 'Ocorrência na entrega',
+  RETURNED: 'Devolvido ao remetente',
+  CANCELED: 'Envio cancelado'
+};
+
+export function registerManualTrackingRoutes(app) {
+  app.post('/shipments/:id/events', requireAnyRole(['operador_logistico'], async ({ ctx, params, body }) => {
+    const status = String(body.status || '').toUpperCase();
+    if (!MANUAL_STATUSES[status]) throw new HttpError(400, 'Situação inválida.');
+    const occurredAt = body.occurredAt ? new Date(body.occurredAt) : new Date();
+    if (Number.isNaN(occurredAt.getTime())) throw new HttpError(400, 'Data inválida.');
+    if (occurredAt.getTime() > Date.now() + 5 * 60 * 1000) throw new HttpError(400, 'A data não pode estar no futuro.');
+    const description = String(body.description || '').trim() || MANUAL_STATUSES[status];
+    const receiver = body.receiverName ? String(body.receiverName).trim() : null;
+
+    const result = await transaction(async (client) => {
+      const sh = await client.query('select * from app.shipments where account_id = $1 and id = $2', [ctx.accountId, params.id]);
+      if (!sh.rows[0]) throw new Error('Shipment not found');
+      const evt = await client.query(
+        `insert into app.tracking_events(account_id, shipment_id, occurred_at, external_status, macro_status, raw_payload, external_event_id)
+         values($1,$2,$3,$4,$5,$6,$7) returning *`,
+        [ctx.accountId, params.id, occurredAt.toISOString(), status === 'DELIVERED' && receiver ? `${description} (recebedor: ${receiver})` : description, status,
+          JSON.stringify({ manual: true, receiverName: receiver }), `manual-${crypto.randomUUID()}`]
+      );
+      await client.query(
+        `update app.shipments set status = $3::app.shipment_status, updated_at = now(),
+           delivered_at = case when $3 = 'DELIVERED' then $4::timestamptz else delivered_at end,
+           delivered_to = case when $3 = 'DELIVERED' then coalesce($5, delivered_to) else delivered_to end,
+           delivery_notes = case when $3 in ('DELIVERED','EXCEPTION','RETURNED') then coalesce($6, delivery_notes) else delivery_notes end
+         where account_id = $1 and id = $2`,
+        [ctx.accountId, params.id, status, occurredAt.toISOString(), receiver, body.notes ? String(body.notes) : null]
+      );
+      await client.query('update app.orders set status = $3::app.order_status, updated_at = now() where account_id = $1 and id = $2', [ctx.accountId, sh.rows[0].order_id, status]);
+      return evt.rows[0];
+    });
+
+    await logAudit({ accountId: ctx.accountId, userId: ctx.userId, entity: 'tracking_event', entityId: result.id, action: 'manual_tracking', afterData: { status, receiver }, correlationId: ctx.correlationId });
     return { ...result, correlationId: ctx.correlationId };
   }));
 }

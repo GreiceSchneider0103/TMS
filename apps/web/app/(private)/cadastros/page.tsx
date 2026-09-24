@@ -1,5 +1,10 @@
+import { Suspense } from 'react';
 import { CrudPanel } from '@/modules/settings/CrudPanel';
 
 export default function CadastrosPage() {
-  return <CrudPanel />;
+  return (
+    <Suspense>
+      <CrudPanel />
+    </Suspense>
+  );
 }

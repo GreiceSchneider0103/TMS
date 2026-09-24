@@ -3,6 +3,7 @@ import zlib from 'node:zlib';
 import forge from 'node-forge';
 import { parseCteXml, parseNfeXml, nfeNumberFromKey, gunzipBase64 } from '../src/services/cte/cteParser.js';
 import { dueSlot } from '../src/services/cte/scheduler.js';
+import { addBusinessDays, businessDaysBetween } from '../src/services/deadlines.js';
 import { encryptSecret, decryptSecret } from '../src/services/cte/secretBox.js';
 import { inspectPfx } from '../src/services/cte/certificate.js';
 import { parseDistributionResponse } from '../src/services/cte/sefazDistribution.js';
@@ -45,6 +46,13 @@ export function runCteAuditTests() {
   assert.equal(nf.pedidoReferencia, 'PED-777');
   assert.deepEqual(nf.referencedKeys, [VENDA]);
   assert.throws(() => parseNfeXml(SAMPLE));
+
+  // Prazos em dias úteis (qui 24/09/2026 + 3 úteis = ter 29/09)
+  assert.equal(addBusinessDays('2026-09-24T12:00:00Z', 3), '2026-09-29');
+  assert.equal(addBusinessDays('2026-09-25T12:00:00Z', 1), '2026-09-28'); // sexta + 1 = segunda
+  assert.equal(addBusinessDays('2026-09-24T12:00:00Z', 0), '2026-09-24');
+  assert.equal(businessDaysBetween('2026-09-24', '2026-09-29'), 3);
+  assert.equal(businessDaysBetween('2026-09-29', '2026-09-24'), 0);
 
   // Janelas da busca automática (08h e 14h de Brasília)
   assert.equal(dueSlot(new Date('2026-09-24T10:30:00Z'), [8, 14]), '2026-09-23@14');
