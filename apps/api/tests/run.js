@@ -6,6 +6,7 @@ import { runTinyClientTests } from './tinyClient.test.js';
 import { runFreightWorkbookCompatibilityTests } from './freightWorkbookCompatibility.test.js';
 import { runCteAuditTests } from './cteAudit.test.js';
 import { runAnalyticsTests } from './analytics.test.js';
+import { runFreightExportTests } from './freightExport.test.js';
 
 runRbacTests();
 runFreightValidationTests();
@@ -15,5 +16,6 @@ runTinyClientTests();
 runFreightWorkbookCompatibilityTests();
 runCteAuditTests();
 runAnalyticsTests();
+runFreightExportTests();
 
 console.log('ok');

@@ -3,6 +3,7 @@ import { query, transaction } from '../db.js';
 import { parseFreightXlsx } from '../services/freightTableImporter.js';
 import { requireAnyRole } from '../utils/context.js';
 import { logAudit } from '../services/audit.js';
+import { buildFreightExport, freightExportWorkbook } from '../services/freightExport.js';
 
 const BULK_INSERT_CHUNK_SIZE = 500;
 
@@ -67,6 +68,26 @@ export function registerFreightTableRoutes(app) {
 
     await logAudit({ accountId: ctx.accountId, userId: ctx.userId, entity: 'freight_table_version', entityId: result.version.id, action: 'import_draft', afterData: parsed.preview.counts, correlationId: ctx.correlationId });
     return { ok: true, preview: parsed.preview, ...result, correlationId: ctx.correlationId };
+  }));
+
+  // Exporta as tabelas publicadas (com as regras do canal) como planilha CEP x peso para subir em outras plataformas.
+  app.post('/freight-tables/export', requireAnyRole(['admin', 'operador_logistico'], async ({ ctx, body }) => {
+    const bands = typeof body.weightBands === 'string'
+      ? body.weightBands.split(/[;\s|]+/).map((x) => Number(String(x).replace(',', '.'))).filter((n) => n > 0)
+      : Array.isArray(body.weightBands) ? body.weightBands : null;
+    if (bands && bands.length > 80) throw new Error('Use no máximo 80 faixas de peso.');
+    const invoiceValue = Number(String(body.invoiceValue ?? 0).replace(',', '.')) || 0;
+    const result = await buildFreightExport(ctx.accountId, { channel: body.channel || null, carrierId: body.carrierId || null, invoiceValue, weightBands: bands });
+    if (!result.rows.length) throw new Error('Nenhuma rota publicada para exportar. Publique uma tabela de frete antes.');
+    const buffer = freightExportWorkbook(result, { channelLabel: body.channelLabel || body.channel || 'todos os canais', invoiceValue });
+    await logAudit({ accountId: ctx.accountId, userId: ctx.userId, entity: 'freight_table', entityId: ctx.accountId, action: 'export', afterData: { count: result.rows.length }, correlationId: ctx.correlationId });
+    return {
+      fileName: `tabela-frete-${(body.channel || 'geral')}-${new Date().toISOString().slice(0, 10)}.xlsx`,
+      mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      contentBase64: buffer.toString('base64'),
+      summary: { ...result.summary, bands: result.bands },
+      correlationId: ctx.correlationId
+    };
   }));
 
   // Download da planilha: devolve o arquivo original quando foi guardado; senão gera uma planilha a partir das rotas gravadas.

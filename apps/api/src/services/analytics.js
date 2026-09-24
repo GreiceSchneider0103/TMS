@@ -3,7 +3,7 @@ import { businessDaysBetween } from './deadlines.js';
 
 // ---------- UF e regiões ----------
 // Faixas de CEP (5 primeiros dígitos) por UF — usadas quando o canal não informa o estado.
-const CEP_RANGES = [
+export const CEP_RANGES = [
   [1000, 19999, 'SP'], [20000, 28999, 'RJ'], [29000, 29999, 'ES'], [30000, 39999, 'MG'], [40000, 48999, 'BA'], [49000, 49999, 'SE'],
   [50000, 56999, 'PE'], [57000, 57999, 'AL'], [58000, 58999, 'PB'], [59000, 59999, 'RN'], [60000, 63999, 'CE'], [64000, 64999, 'PI'],
   [65000, 65999, 'MA'], [66000, 68899, 'PA'], [68900, 68999, 'AP'], [69000, 69299, 'AM'], [69300, 69399, 'RR'], [69400, 69899, 'AM'],

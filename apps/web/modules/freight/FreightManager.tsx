@@ -10,6 +10,7 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { ErrorState } from '@/components/ui/ErrorState';
 import { Field } from '@/components/ui/Field';
 import { Icon } from '@/components/ui/Icon';
+import { FreightExport } from './FreightExport';
 import { downloadBase64 } from '@/services/files';
 import { formatDate, formatDateTime, formatNumber } from '@/services/format';
 
@@ -152,6 +153,8 @@ export function FreightManager() {
           ) : null}
         </Panel>
       ) : null}
+
+      <FreightExport />
 
       <Panel title="Tabelas cadastradas" subtitle={tables.loading ? undefined : `${tableRows.length} tabela(s)`} right={<button className="btn sm" onClick={tables.reload}><Icon name="refresh" />Atualizar</button>}>
         {tables.loading ? <LoadingState text="Carregando tabelas..." /> : tables.error ? <ErrorState text={tables.error} /> : tableRows.length === 0 ? <EmptyState text="Nenhuma tabela importada ainda." /> : (
