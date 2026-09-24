@@ -3,7 +3,7 @@ import { router } from './utils/router.js';
 import { registerQuoteRoutes } from './routes/quotes.js';
 import { registerOrderRoutes } from './routes/orders.js';
 import { registerDashboardRoutes } from './routes/dashboard.js';
-import { registerShipmentRoutes } from './routes/shipments.js';
+import { registerShipmentRoutes, registerManualTrackingRoutes } from './routes/shipments.js';
 import { registerTrackingRoutes } from './routes/tracking.js';
 import { registerFreightTableRoutes } from './routes/freightTables.js';
 import { runWithDbContext } from './db.js';
@@ -26,6 +26,9 @@ import { registerShippingRuleRoutes } from './routes/shippingRules.js';
 import { registerApiCredentialRoutes } from './routes/apiCredentials.js';
 import { registerFreightAuditRoutes } from './routes/freightAudit.js';
 import { registerInvoiceRoutes } from './routes/invoices.js';
+import { registerCarrierMappingRoutes } from './routes/carrierMappings.js';
+import { registerIntegrationIssueRoutes } from './routes/integrationIssues.js';
+import { registerProductImportRoutes } from './routes/productImport.js';
 import { startSefazScheduler } from './services/cte/scheduler.js';
 import { enforceAbuseProtection } from './utils/abuseProtection.js';
 
@@ -40,6 +43,7 @@ registerCompaniesRoutes(app);
 registerDistributionCenterRoutes(app);
 registerCarrierRoutes(app);
 registerCarrierServiceRoutes(app);
+registerProductImportRoutes(app); // antes de /products/:id
 registerProductRoutes(app);
 registerProductLogisticsRoutes(app);
 registerRecipientRoutes(app);
@@ -52,6 +56,9 @@ registerShippingRuleRoutes(app);
 registerApiCredentialRoutes(app);
 registerFreightAuditRoutes(app);
 registerInvoiceRoutes(app);
+registerCarrierMappingRoutes(app);
+registerIntegrationIssueRoutes(app);
+registerManualTrackingRoutes(app);
 
 app.get('/health', async () => ({ ok: true }));
 

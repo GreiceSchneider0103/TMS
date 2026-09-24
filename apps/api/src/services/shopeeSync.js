@@ -1,7 +1,9 @@
 import { HttpError } from '../utils/router.js';
 import { query, transaction } from '../db.js';
 import { ShopeeClient } from './shopeeClient.js';
-import { createAndCalculateQuote, hashRequest } from '../routes/quotes.js';
+import { processOrderIntake } from './orderIntake.js';
+import { recordIssue } from './integrationIssues.js';
+import { addBusinessDays } from './deadlines.js';
 
 const ORDER_STATUS_MAP = {
   UNPAID: 'CREATED',
@@ -63,7 +65,7 @@ export async function syncShopOrders({ accountId, shop, correlationId }) {
     shopId: shop.shop_id,
     query: {
       order_sn_list: orderSns.join(','),
-      response_optional_fields: 'item_list,recipient_address,total_amount,weight'
+      response_optional_fields: 'item_list,recipient_address,total_amount,weight,shipping_carrier,checkout_shipping_carrier'
     }
   });
 
@@ -72,12 +74,13 @@ export async function syncShopOrders({ accountId, shop, correlationId }) {
   let quoted = 0;
 
   for (const shopeeOrder of orders) {
-    const orderRow = await upsertOrder({ accountId, shop, shopeeOrder });
-    synced += 1;
-
-    if (orderRow.status === 'READY_FOR_QUOTE') {
-      const wasQuoted = await tryAutoQuote({ accountId, order: orderRow, correlationId });
-      if (wasQuoted) quoted += 1;
+    try {
+      const orderRow = await upsertOrder({ accountId, shop, shopeeOrder });
+      synced += 1;
+      const intake = await processOrderIntake({ accountId, orderId: orderRow.id, source: 'shopee' });
+      if (intake.quoted) quoted += 1;
+    } catch (error) {
+      await recordIssue({ accountId, source: 'shopee', reason: 'erro_integracao', externalRef: shopeeOrder.order_sn, message: error.message, details: { orderSn: shopeeOrder.order_sn } });
     }
   }
 
@@ -108,46 +111,27 @@ async function upsertOrder({ accountId, shop, shopeeOrder }) {
     shopee_shop_id: shop.shop_id
   };
 
+  const toTs = (unix) => (unix ? new Date(Number(unix) * 1000).toISOString() : null);
+  const carrierName = shopeeOrder.shipping_carrier || shopeeOrder.checkout_shipping_carrier || null;
+
   const { rows } = await query(
-    `insert into app.orders(account_id, external_id, order_number, channel, total_amount, invoice_amount, status, raw_payload)
-     values($1,$2,$3,'shopee',$4,$4,$5,$6)
+    `insert into app.orders(account_id, external_id, order_number, channel, total_amount, invoice_amount, status, raw_payload, sold_at, ship_by_date, marketplace_carrier)
+     values($1,$2,$3,'shopee',$4,$4,$5,$6,$7,$8,$9)
      on conflict (account_id, external_id) do update set
        total_amount = excluded.total_amount,
        invoice_amount = excluded.invoice_amount,
        status = case when app.orders.status in ('CREATED','READY_FOR_QUOTE') then excluded.status else app.orders.status end,
        raw_payload = app.orders.raw_payload || excluded.raw_payload,
+       sold_at = coalesce(app.orders.sold_at, excluded.sold_at),
+       ship_by_date = coalesce(excluded.ship_by_date, app.orders.ship_by_date),
+       marketplace_carrier = coalesce(excluded.marketplace_carrier, app.orders.marketplace_carrier),
        updated_at = now()
      returning *`,
-    [accountId, externalId, shopeeOrder.order_sn, totalAmount, status, JSON.stringify(rawPayload)]
+    [accountId, externalId, shopeeOrder.order_sn, totalAmount, status, JSON.stringify(rawPayload), toTs(shopeeOrder.create_time), toTs(shopeeOrder.ship_by_date), carrierName]
   );
   return rows[0];
 }
 
-async function tryAutoQuote({ accountId, order, correlationId }) {
-  const body = {
-    orderId: order.id,
-    destinationPostalCode: order.raw_payload?.postal_code || '00000000',
-    state: order.raw_payload?.state,
-    city: order.raw_payload?.city,
-    invoiceAmount: order.invoice_amount || order.total_amount,
-    weightKg: Number(order.raw_payload?.weight_kg || 1),
-    lengthCm: Number(order.raw_payload?.length_cm || 10),
-    widthCm: Number(order.raw_payload?.width_cm || 10),
-    heightCm: Number(order.raw_payload?.height_cm || 10),
-    recipientType: order.raw_payload?.recipient_type || 'PF',
-    channel: 'shopee',
-    skus: order.raw_payload?.skus || [],
-    categories: []
-  };
-
-  const result = await createAndCalculateQuote({ accountId, body, requestHash: hashRequest(body) });
-  if (!result.results.length) return false;
-
-  const best = result.results[0];
-  await query('update app.quote_results set selected = true where account_id = $1 and id = $2', [accountId, best.id]);
-  await query("update app.orders set status = 'QUOTED', updated_at = now() where account_id = $1 and id = $2", [accountId, order.id]);
-  return true;
-}
 
 async function loadShopeeOrderContext(accountId, orderId) {
   const orderRes = await query('select * from app.orders where account_id = $1 and id = $2', [accountId, orderId]);
@@ -243,7 +227,7 @@ export async function dispatchShopeeOrder({ accountId, orderId, correlationId })
   const trackingCode = trackingRes?.response?.tracking_number || null;
 
   const quoteRes = await query(
-    `select id, carrier_id from app.quote_results where account_id = $1 and request_id = (
+    `select id, carrier_id, total_days from app.quote_results where account_id = $1 and request_id = (
        select id from app.quote_requests where account_id = $1 and order_id = $2 order by created_at desc limit 1
      ) and selected = true limit 1`,
     [accountId, orderId]
@@ -262,10 +246,11 @@ export async function dispatchShopeeOrder({ accountId, orderId, correlationId })
       row = upd.rows[0];
     } else {
       const ins = await client2.query(
-        `insert into app.shipments(account_id, order_id, quote_result_id, carrier_id, tracking_code, status, idempotency_key)
-         values($1,$2,$3,$4,$5,'DISPATCHED',$6)
+        `insert into app.shipments(account_id, order_id, quote_result_id, carrier_id, tracking_code, status, idempotency_key, dispatched_at, transit_days, estimated_delivery_date)
+         values($1,$2,$3,$4,$5,'DISPATCHED',$6, now(), $7, $8)
          returning *`,
-        [accountId, orderId, selectedQuote?.id || null, selectedQuote?.carrier_id || null, trackingCode, idempotencyKey]
+        [accountId, orderId, selectedQuote?.id || null, selectedQuote?.carrier_id || null, trackingCode, idempotencyKey,
+          selectedQuote?.total_days ?? null, selectedQuote?.total_days != null ? addBusinessDays(new Date(), selectedQuote.total_days) : null]
       );
       row = ins.rows[0];
     }
