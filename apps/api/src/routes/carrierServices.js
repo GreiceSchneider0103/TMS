@@ -41,7 +41,7 @@ export function registerCarrierServiceRoutes(app) {
 
     const { rows } = await query(
       `update app.carrier_services
-       set carrier_id = coalesce($3, carrier_id), name = coalesce($4, name), sla_days = coalesce($5, sla_days), constraints = coalesce($6, constraints), is_active = coalesce($7, is_active), updated_at = now()
+       set carrier_id = coalesce($3, carrier_id), name = coalesce($4, name), sla_days = coalesce($5, sla_days), constraints = coalesce($6, constraints), is_active = coalesce($7, is_active)
        where account_id = $1 and id = $2 and deleted_at is null returning *`,
       [ctx.accountId, params.id, body.carrierId, body.name, body.slaDays, body.constraints, body.isActive]
     );
@@ -50,7 +50,7 @@ export function registerCarrierServiceRoutes(app) {
   }));
 
   app.delete('/carrier-services/:id', requireAnyRole(['admin'], async ({ ctx, params }) => {
-    await query('update app.carrier_services set deleted_at = now(), is_active = false, updated_at = now() where account_id = $1 and id = $2 and deleted_at is null', [ctx.accountId, params.id]);
+    await query('update app.carrier_services set deleted_at = now(), is_active = false where account_id = $1 and id = $2 and deleted_at is null', [ctx.accountId, params.id]);
     return { deleted: true, correlationId: ctx.correlationId };
   }));
 }
