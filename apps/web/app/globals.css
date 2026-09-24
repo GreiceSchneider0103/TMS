@@ -329,3 +329,12 @@ td .sub { display: block; color: var(--muted); font-size: 12px; }
 
 .stat-card strong.money-kpi { font-size: 22px; white-space: nowrap; }
 @media (max-width: 640px) { .stat-card strong.money-kpi { font-size: 16px; } }
+
+/* Integração Tiny: ajuda e opções em cartões */
+.help-box { border: 1px solid var(--line); border-radius: 8px; padding: 10px 14px; background: var(--surface-2, #f8fafc); }
+.help-box summary { cursor: pointer; font-weight: 600; }
+.help-box ol { margin: 8px 0 0 18px; display: grid; gap: 4px; }
+.tiny-options { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 8px; }
+.option-card { align-items: flex-start; border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; min-height: 0; }
+.option-card input { margin-top: 3px; }
+.option-card span { display: grid; gap: 2px; }

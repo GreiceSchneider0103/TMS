@@ -31,6 +31,8 @@ import { registerIntegrationIssueRoutes } from './routes/integrationIssues.js';
 import { registerProductImportRoutes } from './routes/productImport.js';
 import { registerAnalyticsRoutes } from './routes/analytics.js';
 import { startSefazScheduler } from './services/cte/scheduler.js';
+import { registerTinyIntegrationRoutes } from './routes/tinyIntegration.js';
+import { startTinyScheduler } from './services/tiny/tinySync.js';
 import { enforceAbuseProtection } from './utils/abuseProtection.js';
 
 const app = router();
@@ -61,6 +63,7 @@ registerCarrierMappingRoutes(app);
 registerIntegrationIssueRoutes(app);
 registerManualTrackingRoutes(app);
 registerAnalyticsRoutes(app);
+registerTinyIntegrationRoutes(app);
 
 app.get('/health', async () => ({ ok: true }));
 
@@ -105,4 +108,5 @@ const server = http.createServer(async (req, res) => {
 server.listen(process.env.PORT || 3001, () => {
   console.log('TMS API running');
   startSefazScheduler();
+  startTinyScheduler();
 });
