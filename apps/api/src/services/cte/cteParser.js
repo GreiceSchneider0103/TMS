@@ -112,6 +112,7 @@ export function parseNfeXml(xml) {
     destinoUf: text(inf.dest?.enderDest?.UF),
     valorTotal: num(inf.total?.ICMSTot?.vNF),
     valorProdutos: num(inf.total?.ICMSTot?.vProd),
+    valorFrete: num(inf.total?.ICMSTot?.vFrete),
     cfop: text(dets[0]?.prod?.CFOP),
     pedidoReferencia: pedido,
     referencedKeys

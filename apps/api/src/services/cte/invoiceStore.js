@@ -72,6 +72,10 @@ export async function saveInvoice({ accountId, xml = null, fields = null, kind =
       nf.pedidoReferencia || null, nf.referencedKeys || [], source, xml, Boolean(kind)]
   );
   const row = rows[0];
+  // Frete destacado na NF de venda: usado como frete cobrado quando o pedido ainda não tem esse valor.
+  if (row.order_id && row.kind === 'venda' && nf.valorFrete > 0) {
+    await query('update app.orders set shipping_amount = $3, updated_at = now() where account_id = $1 and id = $2 and shipping_amount is null', [accountId, row.order_id, nf.valorFrete]);
+  }
   if (row.order_id) await afterInvoiceLinked(accountId, row.order_id, nf.chave);
   return { id: row.id, orderId: row.order_id, kind: row.kind, created: row.created, linkedBy, chave: nf.chave, numero: nf.numero };
 }

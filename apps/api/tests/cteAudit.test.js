@@ -30,7 +30,7 @@ const NFE_REMESSA = `<nfeProc xmlns="http://www.portalfiscal.inf.br/nfe" versao=
 <emit><CNPJ>98765432000290</CNPJ><xNome>Lessul CD SP</xNome><enderEmit><UF>SP</UF></enderEmit></emit>
 <dest><CPF>12345678901</CPF><xNome>Maria</xNome><enderDest><UF>RS</UF></enderDest></dest>
 <det nItem="1"><prod><CFOP>5923</CFOP><xPed>PED-777</xPed></prod></det>
-<total><ICMSTot><vProd>1400.00</vProd><vNF>1500.00</vNF></ICMSTot></total>
+<total><ICMSTot><vProd>1400.00</vProd><vFrete>89.90</vFrete><vNF>1500.00</vNF></ICMSTot></total>
 </infNFe></NFe></nfeProc>`;
 
 export function runCteAuditTests() {
@@ -42,6 +42,7 @@ export function runCteAuditTests() {
   assert.equal(nf.destinoUf, 'RS');
   assert.equal(nf.valorTotal, 1500);
   assert.equal(nf.valorProdutos, 1400);
+  assert.equal(nf.valorFrete, 89.9);
   assert.equal(nf.cfop, '5923');
   assert.equal(nf.pedidoReferencia, 'PED-777');
   assert.deepEqual(nf.referencedKeys, [VENDA]);

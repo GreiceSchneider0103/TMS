@@ -84,7 +84,7 @@ export default function FinancialPage() {
       {error ? <ErrorState text={error} /> : !fin ? <LoadingState text="Calculando..." /> : (
         <>
           {s.orders && s.withCharge < s.orders ? (
-            <div className="notice info">{s.orders - s.withCharge} de {s.orders} pedido(s) estão sem o valor de frete cobrado do cliente — lucro e margem consideram frete cobrado zero nesses casos. O valor pode ser informado em Pedido → Editar.</div>
+            <div className="notice info">{s.orders - s.withCharge} de {s.orders} pedido(s) estão sem o valor de frete cobrado do cliente — lucro e margem consideram frete cobrado zero nesses casos. O valor vem na sincronização da Shopee/ERP ou da NF de venda; pedidos antigos podem ser atualizados sincronizando de novo ou em Pedido → Editar.</div>
           ) : null}
 
           <Block title={`Vendas · ${formatNumber(s.orders)} pedido(s)`} subtitle="Custo = valor contratado na cotação (ou informado no despacho manual)" rows={[

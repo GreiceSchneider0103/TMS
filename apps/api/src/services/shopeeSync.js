@@ -65,7 +65,7 @@ export async function syncShopOrders({ accountId, shop, correlationId }) {
     shopId: shop.shop_id,
     query: {
       order_sn_list: orderSns.join(','),
-      response_optional_fields: 'item_list,recipient_address,total_amount,weight,shipping_carrier,checkout_shipping_carrier'
+      response_optional_fields: 'item_list,recipient_address,total_amount,weight,shipping_carrier,checkout_shipping_carrier,estimated_shipping_fee'
     }
   });
 
@@ -75,7 +75,8 @@ export async function syncShopOrders({ accountId, shop, correlationId }) {
 
   for (const shopeeOrder of orders) {
     try {
-      const orderRow = await upsertOrder({ accountId, shop, shopeeOrder });
+      const shipping = await fetchBuyerShipping({ client, accessToken, shop, shopeeOrder });
+      const orderRow = await upsertOrder({ accountId, shop, shopeeOrder, shipping });
       synced += 1;
       const intake = await processOrderIntake({ accountId, orderId: orderRow.id, source: 'shopee' });
       if (intake.quoted) quoted += 1;
@@ -88,7 +89,22 @@ export async function syncShopOrders({ accountId, shop, correlationId }) {
   return { synced, quoted };
 }
 
-async function upsertOrder({ accountId, shop, shopeeOrder }) {
+// Frete pago pelo comprador: vem do detalhe financeiro do pedido (escrow). Se não estiver disponível,
+// usa o frete estimado do próprio pedido, marcando a origem para conferência.
+async function fetchBuyerShipping({ client, accessToken, shop, shopeeOrder }) {
+  try {
+    const res = await client.shopRequest('/api/v2/payment/get_escrow_detail', { accessToken, shopId: shop.shop_id, query: { order_sn: shopeeOrder.order_sn } });
+    const fee = res?.response?.order_income?.buyer_paid_shipping_fee;
+    if (fee !== undefined && fee !== null && Number.isFinite(Number(fee))) return { amount: Number(fee), source: 'shopee_escrow' };
+  } catch {
+    // Escrow indisponível (ex.: pedido ainda não liberado): cai no valor do pedido.
+  }
+  const est = shopeeOrder.estimated_shipping_fee;
+  if (est !== undefined && est !== null && Number.isFinite(Number(est))) return { amount: Number(est), source: 'shopee_pedido' };
+  return { amount: null, source: null };
+}
+
+async function upsertOrder({ accountId, shop, shopeeOrder, shipping = { amount: null, source: null } }) {
   const externalId = `shopee-${shopeeOrder.order_sn}`;
   const address = shopeeOrder.recipient_address || {};
   const postalCode = String(address.zipcode || '').replace(/\D/g, '') || '00000000';
@@ -108,15 +124,16 @@ async function upsertOrder({ accountId, shop, shopeeOrder }) {
     skus: (shopeeOrder.item_list || []).map((i) => i.item_sku).filter(Boolean),
     categories: [],
     shopee_order_sn: shopeeOrder.order_sn,
-    shopee_shop_id: shop.shop_id
+    shopee_shop_id: shop.shop_id,
+    ...(shipping.source ? { shipping_amount_source: shipping.source } : {})
   };
 
   const toTs = (unix) => (unix ? new Date(Number(unix) * 1000).toISOString() : null);
   const carrierName = shopeeOrder.shipping_carrier || shopeeOrder.checkout_shipping_carrier || null;
 
   const { rows } = await query(
-    `insert into app.orders(account_id, external_id, order_number, channel, total_amount, invoice_amount, status, raw_payload, sold_at, ship_by_date, marketplace_carrier)
-     values($1,$2,$3,'shopee',$4,$4,$5,$6,$7,$8,$9)
+    `insert into app.orders(account_id, external_id, order_number, channel, total_amount, invoice_amount, status, raw_payload, sold_at, ship_by_date, marketplace_carrier, shipping_amount)
+     values($1,$2,$3,'shopee',$4,$4,$5,$6,$7,$8,$9,$10)
      on conflict (account_id, external_id) do update set
        total_amount = excluded.total_amount,
        invoice_amount = excluded.invoice_amount,
@@ -125,9 +142,10 @@ async function upsertOrder({ accountId, shop, shopeeOrder }) {
        sold_at = coalesce(app.orders.sold_at, excluded.sold_at),
        ship_by_date = coalesce(excluded.ship_by_date, app.orders.ship_by_date),
        marketplace_carrier = coalesce(excluded.marketplace_carrier, app.orders.marketplace_carrier),
+       shipping_amount = coalesce(excluded.shipping_amount, app.orders.shipping_amount),
        updated_at = now()
      returning *`,
-    [accountId, externalId, shopeeOrder.order_sn, totalAmount, status, JSON.stringify(rawPayload), toTs(shopeeOrder.create_time), toTs(shopeeOrder.ship_by_date), carrierName]
+    [accountId, externalId, shopeeOrder.order_sn, totalAmount, status, JSON.stringify(rawPayload), toTs(shopeeOrder.create_time), toTs(shopeeOrder.ship_by_date), carrierName, shipping.amount]
   );
   return rows[0];
 }

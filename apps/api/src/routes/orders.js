@@ -5,7 +5,7 @@ import { requireAnyRole } from '../utils/context.js';
 import { logAudit, logSyncJob } from '../services/audit.js';
 import { parseIntWithBounds } from '../utils/validation.js';
 import { HttpError } from '../utils/router.js';
-import { normalizeMeasures } from '../services/units.js';
+import { normalizeMeasures, parseDecimal } from '../services/units.js';
 import { addBusinessDays } from '../services/deadlines.js';
 import { processOrderIntake } from '../services/orderIntake.js';
 
@@ -224,13 +224,14 @@ export function registerOrderRoutes(app) {
         const totalAmount = Number(o.total || o.total_amount || 0);
         const invoiceAmount = Number(o.invoice_amount || o.total || o.total_amount || 0);
         const upsert = await client.query(
-          `insert into app.orders(account_id, external_id, order_number, channel, total_amount, invoice_amount, status, raw_payload)
-           values($1,$2,$3,$4,$5,$6,'READY_FOR_QUOTE',$7)
+          `insert into app.orders(account_id, external_id, order_number, channel, total_amount, invoice_amount, status, raw_payload, shipping_amount)
+           values($1,$2,$3,$4,$5,$6,'READY_FOR_QUOTE',$7,$8)
            on conflict (account_id, external_id)
            do update set order_number = excluded.order_number, channel = excluded.channel, total_amount = excluded.total_amount,
-             invoice_amount = excluded.invoice_amount, raw_payload = excluded.raw_payload, updated_at = now()
+             invoice_amount = excluded.invoice_amount, raw_payload = excluded.raw_payload,
+             shipping_amount = coalesce(excluded.shipping_amount, app.orders.shipping_amount), updated_at = now()
            returning *`,
-          [ctx.accountId, externalId, String(o.number || o.numero || externalId), String(o.channel || o.canal || 'tiny'), totalAmount, invoiceAmount, o.raw || o]
+          [ctx.accountId, externalId, String(o.number || o.numero || externalId), String(o.channel || o.canal || 'tiny'), totalAmount, invoiceAmount, o.raw || o, erpShippingAmount(o)]
         );
         imported.push(upsert.rows[0]);
       }
@@ -239,4 +240,12 @@ export function registerOrderRoutes(app) {
     await logAudit({ accountId: ctx.accountId, userId: ctx.userId, entity: 'order', entityId: imported[0]?.id || 'batch', action: 'tiny_import', afterData: { count: imported.length }, correlationId: ctx.correlationId });
     return { importedCount: imported.length, imported, correlationId: ctx.correlationId };
   }));
+}
+
+// Frete cobrado do cliente no pedido de venda do ERP (Tiny: valor_frete; aceita também nomes genéricos).
+function erpShippingAmount(o = {}) {
+  const v = o.valor_frete ?? o.valorFrete ?? o.frete ?? o.shipping_amount ?? o.shippingAmount ?? o.raw?.valor_frete ?? null;
+  if (v === null || v === undefined || v === '') return null;
+  const n = parseDecimal(v);
+  return n !== null && n >= 0 ? n : null;
 }
