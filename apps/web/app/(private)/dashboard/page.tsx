@@ -1,4 +1,5 @@
 'use client';
+import Link from 'next/link';
 import { useApi } from '@/hooks/useApi';
 import { api } from '@/services/api';
 import { PageHeader } from '@/components/ui/PageHeader';
@@ -8,49 +9,65 @@ import { StatusBadge } from '@/components/ui/StatusBadge';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { LoadingState } from '@/components/ui/LoadingState';
 import { ErrorState } from '@/components/ui/ErrorState';
+import { eventLabel, formatDateTime, formatMoney, formatNumber } from '@/services/format';
 
 export default function DashboardPage() {
   const summary = useApi(() => api('/dashboard/summary'), []);
   const sync = useApi(() => api('/logs/sync?limit=8'), []);
 
-  const items = (sync.data as any)?.items || [];
+  const s = (summary.data as any) || {};
+  const byCarrier: any[] = s.byCarrier || [];
+  const jobs: any[] = (sync.data as any)?.items || [];
 
   return (
     <div className="grid">
-      <PageHeader title="Dashboard" subtitle="Visão operacional do TMS" />
+      <PageHeader title="Painel" subtitle="Visão geral da operação de transportes" />
+
+      {summary.error ? <ErrorState text={summary.error} /> : null}
 
       <div className="kpi-grid">
-        <StatCard title="Pedidos" value={(summary.data as any)?.orders_total ?? 0} />
-        <StatCard title="Pendentes de despacho" value={(summary.data as any)?.pending_dispatch ?? 0} tone="warning" />
-        <StatCard title="Exceções" value={(summary.data as any)?.exceptions ?? 0} tone="error" />
-        <StatCard title="Em trânsito" value={(summary.data as any)?.in_transit ?? 0} tone="info" />
+        <StatCard title="Pedidos" value={formatNumber(s.orders_total ?? 0)} />
+        <StatCard title="Aguardando cotação" value={formatNumber(s.pending_quote ?? 0)} tone="warning" />
+        <StatCard title="Despachados" value={formatNumber(s.pending_dispatch ?? 0)} tone="info" />
+        <StatCard title="Em trânsito" value={formatNumber(s.in_transit ?? 0)} tone="info" />
+        <StatCard title="Entregues" value={formatNumber(s.delivered ?? 0)} tone="success" />
+        <StatCard title="Ocorrências" value={formatNumber(s.exceptions ?? 0)} tone="error" />
+        <StatCard title="Atrasados (+10 dias)" value={formatNumber(s.delayed ?? 0)} tone="warning" />
+        <StatCard title="Valor dos pedidos" value={formatMoney(s.freight_revenue ?? 0)} />
       </div>
 
       <div className="two-col">
-        <Panel title="Resumo operacional" subtitle="Indicadores do período atual">
-          {summary.loading ? <LoadingState text="Carregando resumo operacional..." /> : summary.error ? <ErrorState text={summary.error} /> : (
-            <div className="detail-grid">
-              {Object.entries((summary.data as any) || {}).map(([key, value]) => (
-                <div className="detail-item" key={key}>
-                  <small>{key}</small>
-                  <strong>{String(value)}</strong>
-                </div>
-              ))}
+        <Panel title="Desempenho por transportadora" subtitle="Embarques, prazo médio e custo de frete">
+          {summary.loading ? <LoadingState /> : byCarrier.length === 0 ? <EmptyState text="Nenhum embarque registrado ainda." /> : (
+            <div className="table-wrap">
+              <table>
+                <thead><tr><th>Transportadora</th><th className="text-right">Embarques</th><th className="text-right">Prazo médio</th><th className="text-right">Custo de frete</th></tr></thead>
+                <tbody>
+                  {byCarrier.map((c, i) => (
+                    <tr key={c.carrier || i}>
+                      <td>{c.carrier || 'Sem transportadora'}</td>
+                      <td className="text-right">{formatNumber(c.shipments)}</td>
+                      <td className="text-right">{c.avg_sla_days ? `${Math.round(Number(c.avg_sla_days))} dias` : '-'}</td>
+                      <td className="text-right">{formatMoney(c.freight_cost)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           )}
         </Panel>
 
-        <Panel title="Jobs recentes" subtitle="Sincronização e integrações">
-          {sync.loading ? <LoadingState text="Carregando jobs..." /> : sync.error ? <ErrorState text={sync.error} /> : items.length === 0 ? <EmptyState text="Sem jobs recentes." /> : (
+        <Panel title="Últimas sincronizações" subtitle="Integrações com ERP e marketplaces" right={<Link className="btn ghost sm" href="/logs">Ver histórico</Link>}>
+          {sync.loading ? <LoadingState /> : sync.error ? <EmptyState text="Histórico indisponível para o seu perfil de acesso." /> : jobs.length === 0 ? <EmptyState text="Nenhuma sincronização recente." /> : (
             <div className="table-wrap">
               <table>
-                <thead><tr><th>Tipo</th><th>Status</th><th>Atualizado</th></tr></thead>
+                <thead><tr><th>Integração</th><th>Situação</th><th>Quando</th></tr></thead>
                 <tbody>
-                  {items.map((job: any) => (
+                  {jobs.map((job) => (
                     <tr key={job.id}>
-                      <td>{job.kind}</td>
+                      <td>{eventLabel(job.kind)}</td>
                       <td><StatusBadge status={job.status} /></td>
-                      <td>{job.updated_at ? new Date(job.updated_at).toLocaleString() : '-'}</td>
+                      <td className="nowrap">{formatDateTime(job.updated_at || job.created_at)}</td>
                     </tr>
                   ))}
                 </tbody>

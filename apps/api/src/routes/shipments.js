@@ -5,12 +5,27 @@ import { logAudit } from '../services/audit.js';
 
 export function registerShipmentRoutes(app) {
   app.get('/shipments', requireAnyRole(['operador_logistico', 'financeiro', 'visualizador'], async ({ ctx }) => {
-    const { rows } = await query('select * from app.shipments where account_id = $1 order by created_at desc limit 100', [ctx.accountId]);
+    const { rows } = await query(
+      `select s.*, c.name as carrier_name, o.order_number, o.channel
+       from app.shipments s
+       left join app.carriers c on c.id = s.carrier_id
+       left join app.orders o on o.id = s.order_id
+       where s.account_id = $1 order by s.created_at desc limit 100`,
+      [ctx.accountId]
+    );
     return { items: rows, correlationId: ctx.correlationId };
   }));
 
   app.get('/shipments/:id', requireAnyRole(['operador_logistico', 'financeiro', 'visualizador'], async ({ ctx, params }) => {
-    const shipment = await query('select * from app.shipments where account_id = $1 and id = $2', [ctx.accountId, params.id]);
+    const shipment = await query(
+      `select s.*, c.name as carrier_name, o.order_number, o.channel, qr.total_amount as freight_amount, qr.total_days
+       from app.shipments s
+       left join app.carriers c on c.id = s.carrier_id
+       left join app.orders o on o.id = s.order_id
+       left join app.quote_results qr on qr.id = s.quote_result_id
+       where s.account_id = $1 and s.id = $2`,
+      [ctx.accountId, params.id]
+    );
     if (!shipment.rows[0]) throw new Error('Shipment not found');
     const packages = await query('select * from app.shipment_packages where account_id = $1 and shipment_id = $2 order by package_number', [ctx.accountId, params.id]);
     const tracking = await query('select * from app.tracking_events where account_id = $1 and shipment_id = $2 order by occurred_at desc', [ctx.accountId, params.id]);

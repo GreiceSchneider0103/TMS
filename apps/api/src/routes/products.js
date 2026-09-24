@@ -68,7 +68,7 @@ export function registerProductRoutes(app) {
   app.patch('/products/:id', requireAnyRole(['admin'], async ({ ctx, params, body }) => {
     const { rows } = await query(
       `update app.products set sku_internal = coalesce($3, sku_internal), sku_external = coalesce($4, sku_external),
-       name = coalesce($5, name), category = coalesce($6, category), updated_at = now()
+       name = coalesce($5, name), category = coalesce($6, category)
        where account_id = $1 and id = $2 and deleted_at is null returning *`,
       [ctx.accountId, params.id, body.skuInternal ? String(body.skuInternal).trim() : null, body.skuExternal, body.name ? String(body.name).trim() : null, body.category]
     );
@@ -77,7 +77,7 @@ export function registerProductRoutes(app) {
   }));
 
   app.delete('/products/:id', requireAnyRole(['admin'], async ({ ctx, params }) => {
-    await query('update app.products set deleted_at = now(), updated_at = now() where account_id = $1 and id = $2 and deleted_at is null', [ctx.accountId, params.id]);
+    await query('update app.products set deleted_at = now() where account_id = $1 and id = $2 and deleted_at is null', [ctx.accountId, params.id]);
     return { deleted: true, correlationId: ctx.correlationId };
   }));
 }

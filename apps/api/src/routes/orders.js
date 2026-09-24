@@ -41,11 +41,25 @@ export function registerOrderRoutes(app) {
     const offsetIdx = params.length;
 
     const { rows } = await query(
-      `select o.*, r.legal_name as recipient_name, r.postal_code as destination_postal_code,
-              (select c.name from app.shipments s join app.carriers c on c.id = s.carrier_id
-               where s.account_id = $1 and s.order_id = o.id order by s.created_at desc limit 1) as carrier_name
+      `select o.*,
+              coalesce(r.legal_name, o.raw_payload->>'recipient_name') as recipient_name,
+              coalesce(r.postal_code, o.raw_payload->>'postal_code') as destination_postal_code,
+              coalesce(sh.carrier_name, sq.carrier_name) as carrier_name,
+              sh.id as shipment_id, sh.tracking_code,
+              sq.id as selected_quote_result_id, sq.total_amount as selected_quote_amount
        from app.orders o
        left join app.recipients r on r.id = o.recipient_id and r.account_id = $1
+       left join lateral (
+         select s.id, s.tracking_code, c.name as carrier_name from app.shipments s left join app.carriers c on c.id = s.carrier_id
+         where s.account_id = $1 and s.order_id = o.id order by s.created_at desc limit 1
+       ) sh on true
+       left join lateral (
+         select qr.id, qr.total_amount, c.name as carrier_name from app.quote_results qr
+         join app.quote_requests qreq on qreq.id = qr.request_id
+         left join app.carriers c on c.id = qr.carrier_id
+         where qr.account_id = $1 and qreq.order_id = o.id and qr.selected = true
+         order by qr.created_at desc limit 1
+       ) sq on true
        where ${conditions.join(' and ')}
        order by o.created_at desc limit $${limitIdx} offset $${offsetIdx}`,
       params
@@ -57,7 +71,13 @@ export function registerOrderRoutes(app) {
     const { rows } = await query(`select * from app.orders where account_id = $1 and id = $2`, [ctx.accountId, params.id]);
     if (!rows[0]) throw new Error('Order not found');
     const items = await query(`select * from app.order_items where account_id = $1 and order_id = $2`, [ctx.accountId, params.id]);
-    return { ...rows[0], items: items.rows, correlationId: ctx.correlationId };
+    const shipments = await query(
+      `select s.id, s.status, s.tracking_code, s.created_at, c.name as carrier_name
+       from app.shipments s left join app.carriers c on c.id = s.carrier_id
+       where s.account_id = $1 and s.order_id = $2 order by s.created_at desc`,
+      [ctx.accountId, params.id]
+    );
+    return { ...rows[0], items: items.rows, shipments: shipments.rows, correlationId: ctx.correlationId };
   }));
 
   app.post('/orders/import/tiny', requireAnyRole(['operador_logistico', 'analista_integracao'], async ({ ctx, body }) => {

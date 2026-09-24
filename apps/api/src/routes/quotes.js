@@ -34,8 +34,22 @@ export function registerQuoteRoutes(app) {
     };
 
     const result = await createAndCalculateQuote({ accountId: ctx.accountId, body, requestHash: hashRequest(body) });
+    result.results = await withCarrierNames(ctx.accountId, result.results);
     await logAudit({ accountId: ctx.accountId, userId: ctx.userId, entity: 'quote_request', entityId: result.request.id, action: 'automatic_quote', afterData: { orderId: order.id, resultCount: result.results.length }, correlationId: ctx.correlationId });
     return { ...result, correlationId: ctx.correlationId };
+  }));
+
+  app.get('/quotes/order/:orderId', requireAnyRole(['operador_logistico', 'financeiro', 'visualizador'], async ({ ctx, params }) => {
+    const request = await query(
+      `select * from app.quote_requests where account_id = $1 and order_id = $2 order by created_at desc limit 1`,
+      [ctx.accountId, params.orderId]
+    );
+    if (!request.rows[0]) return { request: null, results: [], correlationId: ctx.correlationId };
+    const results = await query(
+      `select * from app.quote_results where account_id = $1 and request_id = $2 order by ranking asc nulls last, total_amount asc`,
+      [ctx.accountId, request.rows[0].id]
+    );
+    return { request: request.rows[0], results: await withCarrierNames(ctx.accountId, results.rows), correlationId: ctx.correlationId };
   }));
 
   app.patch('/quotes/results/:id/select', requireAnyRole(['operador_logistico'], async ({ ctx, params }) => {
@@ -109,6 +123,14 @@ export async function createAndCalculateQuote({ accountId, body, requestHash }) 
     persisted.push(ins.rows[0]);
   }
   return { request, results: persisted };
+}
+
+async function withCarrierNames(accountId, results) {
+  const ids = [...new Set(results.map((r) => r.carrier_id).filter(Boolean))];
+  if (!ids.length) return results;
+  const { rows } = await query('select id, name from app.carriers where account_id = $1 and id = any($2::uuid[])', [accountId, ids]);
+  const names = new Map(rows.map((r) => [r.id, r.name]));
+  return results.map((r) => ({ ...r, carrier_name: names.get(r.carrier_id) || null }));
 }
 
 export function hashRequest(payload) {

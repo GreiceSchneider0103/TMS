@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { api } from '@/services/api';
 import { useApi } from '@/hooks/useApi';
 import { PageHeader } from '@/components/ui/PageHeader';
@@ -8,6 +8,9 @@ import { StatusBadge } from '@/components/ui/StatusBadge';
 import { LoadingState } from '@/components/ui/LoadingState';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { ErrorState } from '@/components/ui/ErrorState';
+import { Field } from '@/components/ui/Field';
+import { Icon } from '@/components/ui/Icon';
+import { formatDate, formatDateTime, formatNumber } from '@/services/format';
 
 const COUNT_LABELS: Record<string, string> = {
   tipo_carga_detectados: 'Tipos de carga',
@@ -16,31 +19,39 @@ const COUNT_LABELS: Record<string, string> = {
   erros_detectados: 'Erros'
 };
 
+// Versões importadas recebem rótulo automático "v-<timestamp>"; exibimos a data em vez do número.
+function versionLabel(label?: string, createdAt?: string) {
+  if (!label) return '-';
+  return /^v-\d{10,}$/.test(label) ? `Importada em ${formatDate(createdAt || Number(label.slice(2)))}` : label;
+}
+
 export function FreightManager() {
   const [summary, setSummary] = useState<{ counts: Record<string, number>; errors?: string[] } | null>(null);
-  const [selectedTable, setSelectedTable] = useState<any>(null);
-  const [versionId, setVersionId] = useState('');
   const [tableName, setTableName] = useState('');
   const [carrierId, setCarrierId] = useState('');
-  const [message, setMessage] = useState('');
+  const [file, setFile] = useState<File | null>(null);
+  const [feedback, setFeedback] = useState<{ ok: boolean; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
-  const [nonce, setNonce] = useState(0);
-  const tables = useApi(() => api('/freight-tables'), [nonce]);
-  const tableRows = (tables.data as any)?.items || [];
+  const fileInput = useRef<HTMLInputElement>(null);
+  const tables = useApi(() => api('/freight-tables'), []);
+  const carriers = useApi(() => api('/carriers'), []);
+  const tableRows: any[] = (tables.data as any)?.items || [];
 
-  async function toBase64(file: File) {
+  async function toBase64(f: File) {
     return new Promise<string>((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = () => resolve(String(reader.result).split(',').pop() || '');
       reader.onerror = reject;
-      reader.readAsDataURL(file);
+      reader.readAsDataURL(f);
     });
   }
 
-  async function importWorkbook(file: File) {
-    if (!tableName.trim()) return setMessage('Informe o nome da tabela antes de importar.');
+  async function importWorkbook() {
+    if (!tableName.trim()) return setFeedback({ ok: false, text: 'Informe o nome da tabela antes de importar.' });
+    if (!file) return setFeedback({ ok: false, text: 'Escolha a planilha (.xlsx) a importar.' });
     setBusy(true);
-    setMessage('Importando planilha...');
+    setFeedback({ ok: true, text: 'Importando planilha, isso pode levar alguns segundos...' });
+    setSummary(null);
     try {
       const fileBase64 = await toBase64(file);
       const res = await api('/freight-tables/import', {
@@ -51,33 +62,38 @@ export function FreightManager() {
           mimeType: file.type || 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
           byteSize: file.size,
           tableName: tableName.trim(),
-          carrierId: carrierId.trim() || null
+          carrierId: carrierId || null
         })
       });
-      const importedVersionId = res?.version?.id ? String(res.version.id) : '';
       setSummary({ counts: res?.preview?.counts || {}, errors: res?.errors });
-      setVersionId(importedVersionId);
-      setMessage(importedVersionId ? `Importação concluída. Versão criada como rascunho — publique para entrar em uso.` : 'Importação encontrou problemas na planilha.');
-      setNonce((v) => v + 1);
+      if (res?.version?.id) {
+        setFeedback({ ok: true, text: 'Planilha importada como rascunho. Confira o resumo e clique em “Publicar” para que ela passe a ser usada nas cotações.' });
+        setTableName('');
+        setFile(null);
+        if (fileInput.current) fileInput.current.value = '';
+      } else {
+        setFeedback({ ok: false, text: 'A planilha tem problemas e não foi importada. Veja os erros abaixo.' });
+      }
+      tables.reload();
     } catch (error: any) {
-      setMessage(`Falha ao importar a planilha: ${translateError(error?.message)}`);
+      setFeedback({ ok: false, text: `Falha ao importar a planilha: ${error.message}` });
     } finally {
       setBusy(false);
     }
   }
 
-  async function runVersionAction(action: 'publish' | 'rollback', targetVersionId?: string) {
-    const trimmed = (targetVersionId || versionId).trim();
-    if (!trimmed) return setMessage('Informe versionId para executar a ação.');
-
+  async function runVersionAction(action: 'publish' | 'rollback', row: any) {
+    const question = action === 'publish'
+      ? `Publicar a tabela "${row.name}"? Ela passa a ser usada nas cotações.`
+      : `Reverter a tabela "${row.name}" para a versão anterior?`;
+    if (!window.confirm(question)) return;
     setBusy(true);
     try {
-      const endpoint = action === 'publish' ? `/freight-tables/versions/${trimmed}/publish` : `/freight-tables/versions/${trimmed}/rollback`;
-      await api(endpoint, { method: 'POST', body: '{}' });
-      setMessage(action === 'publish' ? `Versão ${trimmed} publicada.` : `Rollback da versão ${trimmed} executado.`);
-      setNonce((v) => v + 1);
+      await api(`/freight-tables/versions/${row.version_id}/${action}`, { method: 'POST', body: '{}' });
+      setFeedback({ ok: true, text: action === 'publish' ? `Tabela "${row.name}" publicada.` : `Tabela "${row.name}" revertida para a versão anterior.` });
+      tables.reload();
     } catch (error: any) {
-      setMessage(`Falha ao ${action === 'publish' ? 'publicar' : 'reverter'} a versão: ${translateError(error?.message)}`);
+      setFeedback({ ok: false, text: `Falha ao ${action === 'publish' ? 'publicar' : 'reverter'} a tabela: ${error.message}` });
     } finally {
       setBusy(false);
     }
@@ -85,49 +101,63 @@ export function FreightManager() {
 
   return (
     <div className="grid">
-      <PageHeader title="Tabelas de Frete" subtitle="Gerenciar tabelas de preços e prazos" />
+      <PageHeader title="Tabelas de frete" subtitle="Tabelas de preço e prazo das transportadoras usadas nas cotações" />
 
-      <Panel title="Importar planilha">
+      <Panel title="Importar planilha" subtitle="Envie a tabela da transportadora no formato .xlsx">
         <div className="filter-row">
-          <input className="input" placeholder="Nome da tabela (obrigatório)" value={tableName} disabled={busy} onChange={(e) => setTableName(e.target.value)} />
-          <input className="input" placeholder="ID da transportadora (opcional)" value={carrierId} disabled={busy} onChange={(e) => setCarrierId(e.target.value)} />
-          <label className="btn primary" style={{ display: 'inline-flex' }}>Importar Planilha<input hidden type="file" accept=".xlsx" disabled={busy} onChange={async (e) => {
-            const file = e.target.files?.[0];
-            if (!file) return;
-            await importWorkbook(file);
-          }} /></label>
+          <Field label="Nome da tabela" required className="grow">
+            <input className="input" placeholder="Ex.: RodoBrasil Sul 2026" value={tableName} disabled={busy} onChange={(e) => setTableName(e.target.value)} />
+          </Field>
+          <Field label="Transportadora">
+            <select className="select" value={carrierId} disabled={busy} onChange={(e) => setCarrierId(e.target.value)}>
+              <option value="">Não vincular</option>
+              {((carriers.data as any)?.items || []).map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+          </Field>
+          <Field label="Planilha" required className="grow">
+            <input ref={fileInput} className="input" type="file" accept=".xlsx" disabled={busy} onChange={(e) => setFile(e.target.files?.[0] || null)} />
+          </Field>
+          <button className="btn primary" disabled={busy || !file || !tableName.trim()} onClick={importWorkbook}>{busy ? 'Importando...' : 'Importar'}</button>
         </div>
       </Panel>
 
-      <Panel title="Ações de versão">
-        <div className="filter-row">
-          <input className="input" placeholder="versionId" value={versionId} disabled={busy} onChange={(e) => setVersionId(e.target.value)} />
-          <button className="btn primary" disabled={busy || !versionId.trim()} onClick={() => runVersionAction('publish')}>Publicar</button>
-          <button className="btn" disabled={busy || !versionId.trim()} onClick={() => runVersionAction('rollback')}>Rollback</button>
-          {busy ? <LoadingState text="Processando operação..." /> : null}
-        </div>
-        {message ? <div className="empty-state">{message}</div> : null}
-      </Panel>
+      {feedback ? <div className={`notice ${feedback.ok ? 'ok' : 'err'}`}>{feedback.text}</div> : null}
 
-      <Panel title="Tabelas Cadastradas" right={<button className="btn" onClick={() => setNonce((v) => v + 1)}>Atualizar</button>}>
-        {tables.loading ? <LoadingState text="Carregando tabelas..." /> : tables.error ? <ErrorState text={tables.error} /> : tableRows.length === 0 ? <EmptyState /> : (
+      {summary ? (
+        <Panel title="Resumo da importação" right={<button className="btn ghost sm" onClick={() => setSummary(null)}>Fechar</button>}>
+          <div className="chips">
+            {Object.entries(summary.counts).map(([key, value]) => (
+              <span key={key} className={`badge ${key === 'erros_detectados' && Number(value) > 0 ? 'error' : 'info'}`}>{COUNT_LABELS[key] || key}: {formatNumber(value)}</span>
+            ))}
+          </div>
+          {summary.errors && summary.errors.length > 0 ? (
+            <ul className="text-error" style={{ margin: '12px 0 0', paddingLeft: 18 }}>
+              {summary.errors.map((err, i) => <li key={i}>{err}</li>)}
+            </ul>
+          ) : null}
+        </Panel>
+      ) : null}
+
+      <Panel title="Tabelas cadastradas" subtitle={tables.loading ? undefined : `${tableRows.length} tabela(s)`} right={<button className="btn sm" onClick={tables.reload}><Icon name="refresh" />Atualizar</button>}>
+        {tables.loading ? <LoadingState text="Carregando tabelas..." /> : tables.error ? <ErrorState text={tables.error} /> : tableRows.length === 0 ? <EmptyState text="Nenhuma tabela importada ainda." /> : (
           <div className="table-wrap">
-            <table>
-              <thead><tr><th>Nome</th><th>Transportadora</th><th>Versão</th><th>Status</th><th>Data</th><th>Ações</th></tr></thead>
+            <table className="stack">
+              <thead><tr><th>Nome</th><th>Transportadora</th><th>Versão</th><th>Situação</th><th>Publicada em</th><th></th></tr></thead>
               <tbody>
-                {tableRows.map((r: any) => (
+                {tableRows.map((r) => (
                   <tr key={r.table_id}>
-                    <td>{r.name}</td><td>{r.carrier_name || '-'}</td><td>{r.version_label || '-'}</td>
-                    <td><StatusBadge status={r.status || 'DRAFT'} /></td>
-                    <td>{r.created_at ? new Date(r.created_at).toLocaleDateString() : '-'}</td>
-                    <td>
+                    <td className="cell-title">{r.name}</td>
+                    <td data-label="Transportadora">{r.carrier_name || '-'}</td>
+                    <td data-label="Versão">{versionLabel(r.version_label, r.created_at)}</td>
+                    <td data-label="Situação"><StatusBadge status={r.status || 'DRAFT'} /></td>
+                    <td data-label="Publicada em" className="nowrap">{r.published_at ? formatDateTime(r.published_at) : '-'}</td>
+                    <td data-label="" className="text-right">
                       <div className="row-actions">
-                        <button className="btn ghost" onClick={() => setSelectedTable(r)}>Ver</button>
                         {r.status === 'DRAFT' ? (
-                          <button className="btn primary" disabled={busy || !r.version_id} onClick={() => runVersionAction('publish', r.version_id)}>Publicar</button>
-                        ) : (
-                          <button className="btn" disabled={busy || !r.version_id} onClick={() => runVersionAction('rollback', r.version_id)}>Rollback</button>
-                        )}
+                          <button className="btn primary sm" disabled={busy || !r.version_id} onClick={() => runVersionAction('publish', r)}>Publicar</button>
+                        ) : r.status === 'PUBLISHED' ? (
+                          <button className="btn sm" disabled={busy || !r.version_id} onClick={() => runVersionAction('rollback', r)}>Reverter</button>
+                        ) : null}
                       </div>
                     </td>
                   </tr>
@@ -137,45 +167,6 @@ export function FreightManager() {
           </div>
         )}
       </Panel>
-
-      {summary ? (
-        <Panel title="Resumo da importação">
-          <div className="filter-row">
-            {Object.entries(summary.counts).map(([key, value]) => (
-              <StatusBadge key={key} status={`${COUNT_LABELS[key] || key}: ${value}`} />
-            ))}
-          </div>
-          {summary.errors && summary.errors.length > 0 ? (
-            <ul>
-              {summary.errors.map((err, i) => <li key={i}>{err}</li>)}
-            </ul>
-          ) : null}
-        </Panel>
-      ) : null}
-
-      {selectedTable ? (
-        <Panel title="Detalhes da tabela" right={<button className="btn ghost" onClick={() => setSelectedTable(null)}>Fechar</button>}>
-          <div className="grid">
-            <div><strong>Nome:</strong> {selectedTable.name || '-'}</div>
-            <div><strong>Transportadora:</strong> {selectedTable.carrier_name || '-'}</div>
-            <div><strong>Versão:</strong> {selectedTable.version_label || '-'}</div>
-            <div><strong>Status:</strong> {selectedTable.status || '-'}</div>
-            <div><strong>Publicado em:</strong> {selectedTable.published_at ? new Date(selectedTable.published_at).toLocaleString() : 'Ainda não publicado'}</div>
-            <div><strong>Criado em:</strong> {selectedTable.created_at ? new Date(selectedTable.created_at).toLocaleString() : '-'}</div>
-          </div>
-        </Panel>
-      ) : null}
     </div>
   );
-}
-
-function translateError(message?: string): string {
-  if (!message) return 'erro inesperado';
-  const known: Record<string, string> = {
-    'Failed to fetch': 'não foi possível conectar ao servidor. Verifique sua conexão e tente novamente.',
-    'Forbidden': 'você não tem permissão para executar esta ação.',
-    'Payload too large': 'o arquivo é grande demais para ser enviado.',
-    'Unauthorized': 'sua sessão expirou. Faça login novamente.'
-  };
-  return known[message] || message;
 }
