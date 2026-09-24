@@ -81,7 +81,7 @@ const PT_TONES: Record<string, Tone> = {
   ativa: 'success', ativo: 'success', aprovado: 'success', selecionada: 'success', conectada: 'success', publicada: 'success', entregue: 'success',
   pendente: 'warning', rascunho: 'warning', sandbox: 'warning', 'em desenvolvimento': 'warning', 'produção': 'success', 'disponível': 'neutral', 'em trânsito': 'warning', 'não implementada': 'warning',
   inativa: 'neutral', inativo: 'neutral', revogada: 'error', erro: 'error', desconectada: 'error',
-  'válido': 'success', vencido: 'error', 'sem certificado': 'neutral', 'sem vínculo': 'warning', 'sem pedido': 'warning', recebido: 'success'
+  'válido': 'success', vencido: 'error', 'sem certificado': 'neutral', 'sem vínculo': 'warning', 'sem pedido': 'warning', recebido: 'success', ignorado: 'neutral', 'sucesso com falhas': 'warning'
 };
 
 export function statusInfo(status: unknown): { label: string; tone: Tone } {
@@ -122,6 +122,11 @@ const EVENT_LABELS: Record<string, string> = {
   cte: 'CT-e',
   company_certificate: 'Certificado digital',
   order_invoice: 'Nota fiscal',
+  manual_dispatch: 'Despacho manual',
+  manual_tracking: 'Atualização manual de rastreio',
+  carrier_mapping: 'De-para de transportadora',
+  integration_issue: 'Pendência de integração',
+  discard: 'Descarte',
   shopee_invoice: 'Envio de NF à Shopee',
   tracking_webhook: 'Evento de rastreio',
   create: 'Criação',
