@@ -1,3 +1,5 @@
+import { formatDateTime } from '@/services/format';
+
 export type RuleType = 'Desconto' | 'Adicional';
 
 export type ShippingRule = {
@@ -106,7 +108,7 @@ export function apiRuleToRule(row: any): ShippingRule {
     region: conditions.state || conditions.city || '',
     actionType,
     value,
-    updatedAt: row.created_at ? new Date(row.created_at).toLocaleString() : '',
+    updatedAt: formatDateTime(row.updated_at || row.created_at),
     conditions: {
       cepRange: conditions.cep_start && conditions.cep_end ? `${conditions.cep_start}-${conditions.cep_end}` : '',
       city: conditions.city || '',

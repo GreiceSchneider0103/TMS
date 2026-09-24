@@ -24,3 +24,6 @@ npm-debug.log*
 
 # local worker run logs
 workers/logs/
+
+# build cache do TypeScript
+*.tsbuildinfo

@@ -2,37 +2,61 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { clearSession } from '@/services/session';
+import { Icon } from '@/components/ui/Icon';
 
-const links = [
-  ['Dashboard', '/dashboard', '◻️'],
-  ['Pedidos', '/orders', '📦'],
-  ['Cotações', '/quotes', '🧾'],
-  ['Embarques', '/shipments', '🚚'],
-  ['Tracking', '/tracking', '📍'],
-  ['Cadastros', '/cadastros', '🗂️'],
-  ['Frete', '/freight', '📋'],
-  ['Regras de Frete', '/shipping-rules', '％'],
-  ['Auditoria', '/audit', '🛡️'],
-  ['Logs', '/logs', '📄'],
-  ['Configurações', '/settings', '⚙️']
-] as const;
+const sections: { title: string; links: [string, string, string][] }[] = [
+  {
+    title: 'Operação',
+    links: [
+      ['Painel', '/dashboard', 'dashboard'],
+      ['Pedidos', '/orders', 'orders'],
+      ['Cotações', '/quotes', 'quotes'],
+      ['Embarques', '/shipments', 'shipments'],
+      ['Rastreamento', '/tracking', 'tracking']
+    ]
+  },
+  {
+    title: 'Frete',
+    links: [
+      ['Tabelas de frete', '/freight', 'freight'],
+      ['Regras de frete', '/shipping-rules', 'rules']
+    ]
+  },
+  {
+    title: 'Administração',
+    links: [
+      ['Cadastros', '/cadastros', 'registry'],
+      ['Auditoria', '/audit', 'audit'],
+      ['Histórico de integrações', '/logs', 'logs'],
+      ['Configurações', '/settings', 'settings']
+    ]
+  }
+];
 
-export function Sidebar() {
+export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
   const router = useRouter();
 
   return (
     <aside className="sidebar">
       <div className="brand">
-        <h1>TMS Logistics</h1>
-        <p>Transportation Management</p>
+        <span className="brand-mark">L</span>
+        <div>
+          <strong>TMS Lessul</strong>
+          <span>Gestão de transportes</span>
+        </div>
       </div>
 
-      {links.map(([label, href, icon]) => (
-        <Link key={href} href={href} className={`nav-link ${pathname.startsWith(href) ? 'active' : ''}`}>
-          <span>{icon}</span>
-          <span>{label}</span>
-        </Link>
+      {sections.map((section) => (
+        <nav key={section.title} aria-label={section.title}>
+          <div className="nav-section">{section.title}</div>
+          {section.links.map(([label, href, icon]) => (
+            <Link key={href} href={href} onClick={onNavigate} className={`nav-link ${pathname.startsWith(href) ? 'active' : ''}`}>
+              <Icon name={icon} />
+              <span>{label}</span>
+            </Link>
+          ))}
+        </nav>
       ))}
 
       <div className="nav-spacer" />
@@ -44,6 +68,7 @@ export function Sidebar() {
           router.push('/login');
         }}
       >
+        <Icon name="logout" />
         Sair
       </button>
     </aside>

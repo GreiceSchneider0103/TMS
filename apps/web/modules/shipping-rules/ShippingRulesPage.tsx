@@ -8,6 +8,11 @@ import { StatCard } from '@/components/ui/StatCard';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 import { LoadingState } from '@/components/ui/LoadingState';
 import { ErrorState } from '@/components/ui/ErrorState';
+import { EmptyState } from '@/components/ui/EmptyState';
+import { Field } from '@/components/ui/Field';
+import { Modal } from '@/components/ui/Modal';
+import { Icon } from '@/components/ui/Icon';
+import { channelLabel } from '@/services/format';
 import { ACTION_OPTIONS, apiRuleToRule, ruleToApiPayload } from './types';
 import type { ShippingRule } from './types';
 
@@ -15,13 +20,35 @@ const EMPTY_RULE: ShippingRule = {
   id: '', name: '', description: '', priority: 10, active: true, validFrom: '', validTo: '', channel: '', carrier: '', service: '', region: '', actionType: ACTION_OPTIONS[0], value: '', updatedAt: '', conditions: {}
 };
 
+const CARRIER_ACTIONS = ['Bloquear transportadora', 'Priorizar transportadora'];
+const VALUE_HINT: Record<string, string> = {
+  'Desconto percentual': 'Percentual (ex.: 10 para 10%)',
+  'Adicional percentual': 'Percentual (ex.: 5 para 5%)',
+  'Desconto fixo': 'Valor em R$',
+  'Adicional fixo': 'Valor em R$',
+  'Adicionar prazo': 'Dias a somar ao prazo',
+  'Aplicar mínimo': 'Valor mínimo do frete em R$',
+  'Aplicar máximo': 'Valor máximo do frete em R$'
+};
+
+function formatActionValue(rule: ShippingRule, carrierName: (id: string) => string) {
+  if (!rule.value) return '-';
+  if (CARRIER_ACTIONS.includes(rule.actionType)) return carrierName(rule.value);
+  if (rule.actionType.includes('percentual')) return `${rule.value}%`;
+  if (rule.actionType === 'Adicionar prazo') return `+${rule.value} dia(s)`;
+  return `R$ ${rule.value}`;
+}
+
 export function ShippingRulesPage() {
   const [status, setStatus] = useState('all');
   const [type, setType] = useState('all');
   const [modalRule, setModalRule] = useState<ShippingRule | null>(null);
-  const [nonce, setNonce] = useState(0);
   const [busy, setBusy] = useState(false);
-  const { data, loading, error } = useApi(() => api('/shipping-rules'), [nonce]);
+  const [feedback, setFeedback] = useState<{ ok: boolean; text: string } | null>(null);
+  const { data, loading, error, reload } = useApi(() => api('/shipping-rules'), []);
+  const carriers = useApi(() => api('/carriers'), []);
+  const carrierItems: any[] = (carriers.data as any)?.items || [];
+  const carrierName = (id: string) => carrierItems.find((c) => c.id === id)?.name || 'Transportadora removida';
 
   const rules: ShippingRule[] = useMemo(() => ((data as any)?.items || []).map(apiRuleToRule), [data]);
 
@@ -41,9 +68,10 @@ export function ShippingRulesPage() {
         await api('/shipping-rules', { method: 'POST', body: JSON.stringify(payload) });
       }
       setModalRule(null);
-      setNonce((v) => v + 1);
+      setFeedback({ ok: true, text: `Regra "${rule.name}" salva.` });
+      reload();
     } catch (e: any) {
-      alert(`Falha ao salvar regra: ${e.message}`);
+      setFeedback({ ok: false, text: `Não foi possível salvar a regra: ${e.message}` });
     } finally {
       setBusy(false);
     }
@@ -54,9 +82,10 @@ export function ShippingRulesPage() {
     setBusy(true);
     try {
       await api(`/shipping-rules/${rule.id}`, { method: 'DELETE' });
-      setNonce((v) => v + 1);
+      setFeedback({ ok: true, text: `Regra "${rule.name}" excluída.` });
+      reload();
     } catch (e: any) {
-      alert(`Falha ao excluir regra: ${e.message}`);
+      setFeedback({ ok: false, text: `Não foi possível excluir a regra: ${e.message}` });
     } finally {
       setBusy(false);
     }
@@ -64,51 +93,57 @@ export function ShippingRulesPage() {
 
   return (
     <div className="grid">
-      <PageHeader title="Regras de Frete" subtitle="Configure descontos, adicionais e condições especiais" actions={<button className="btn primary" onClick={() => setModalRule(EMPTY_RULE)}>+ Nova Regra</button>} />
+      <PageHeader title="Regras de frete" subtitle="Descontos, adicionais e condições especiais aplicados às cotações" actions={<button className="btn primary" onClick={() => setModalRule(EMPTY_RULE)}><Icon name="plus" />Nova regra</button>} />
 
       <div className="kpi-grid">
-        <StatCard title="Total de Regras" value={rules.length} />
-        <StatCard title="Regras Ativas" value={rules.filter((r) => r.active).length} tone="success" />
+        <StatCard title="Total de regras" value={rules.length} />
+        <StatCard title="Regras ativas" value={rules.filter((r) => r.active).length} tone="success" />
         <StatCard title="Descontos" value={rules.filter((r) => r.actionType.toLowerCase().includes('desconto') || r.actionType.toLowerCase().includes('frete grátis')).length} tone="info" />
         <StatCard title="Adicionais" value={rules.filter((r) => r.actionType.toLowerCase().includes('adicional')).length} tone="warning" />
       </div>
 
-      <Panel title="Regras Cadastradas">
+      {feedback && !modalRule ? <div className={`notice ${feedback.ok ? 'ok' : 'err'}`}>{feedback.text}</div> : null}
+
+      <Panel title="Regras cadastradas">
         <div className="filter-row">
-          <select className="select" value={type} onChange={(e) => setType(e.target.value)}>
-            <option value="all">Todos os tipos</option>
-            <option value="desconto">Desconto</option>
-            <option value="adicional">Adicional</option>
-            <option value="bloquear">Bloqueio</option>
-          </select>
-          <select className="select" value={status} onChange={(e) => setStatus(e.target.value)}>
-            <option value="all">Todos os status</option>
-            <option value="true">Ativa</option>
-            <option value="false">Inativa</option>
-          </select>
+          <Field label="Tipo">
+            <select className="select" value={type} onChange={(e) => setType(e.target.value)}>
+              <option value="all">Todos</option>
+              <option value="desconto">Desconto</option>
+              <option value="adicional">Adicional</option>
+              <option value="bloquear">Bloqueio</option>
+            </select>
+          </Field>
+          <Field label="Situação">
+            <select className="select" value={status} onChange={(e) => setStatus(e.target.value)}>
+              <option value="all">Todas</option>
+              <option value="true">Ativas</option>
+              <option value="false">Inativas</option>
+            </select>
+          </Field>
         </div>
 
-        {loading ? <LoadingState text="Carregando regras..." /> : error ? <ErrorState text={error} /> : (
+        {loading ? <LoadingState text="Carregando regras..." /> : error ? <ErrorState text={error} /> : filtered.length === 0 ? <EmptyState text={rules.length ? 'Nenhuma regra para os filtros selecionados.' : 'Nenhuma regra cadastrada. Clique em “Nova regra” para criar a primeira.'} /> : (
           <div className="table-wrap">
-            <table>
-              <thead><tr><th>Prioridade</th><th>Nome</th><th>Canal</th><th>Região</th><th>Transportadora</th><th>Tipo de Ação</th><th>Valor</th><th>Status</th><th>Última atualização</th><th>Ações</th></tr></thead>
+            <table className="stack">
+              <thead><tr><th>Prioridade</th><th>Nome</th><th>Canal</th><th>Região</th><th>Transportadora</th><th>Ação</th><th>Valor</th><th>Situação</th><th>Atualizada em</th><th></th></tr></thead>
               <tbody>
                 {filtered.map((r) => (
                   <tr key={r.id}>
-                    <td>{r.priority}</td>
-                    <td>{r.name}</td>
-                    <td>{r.channel || '-'}</td>
-                    <td>{r.region || '-'}</td>
-                    <td>{r.carrier || '-'}</td>
-                    <td>{r.actionType}</td>
-                    <td>{r.value || '-'}</td>
-                    <td><StatusBadge status={r.active ? 'Ativa' : 'Inativa'} /></td>
-                    <td>{r.updatedAt}</td>
-                    <td>
+                    <td data-label="Prioridade">{r.priority}</td>
+                    <td className="cell-title">{r.name}{r.description ? <span className="sub">{r.description}</span> : null}</td>
+                    <td data-label="Canal">{r.channel ? channelLabel(r.channel) : 'Todos'}</td>
+                    <td data-label="Região">{r.region || 'Todas'}</td>
+                    <td data-label="Transportadora">{r.carrier ? carrierName(r.carrier) : 'Todas'}</td>
+                    <td data-label="Ação">{r.actionType}</td>
+                    <td data-label="Valor" className="nowrap">{formatActionValue(r, carrierName)}</td>
+                    <td data-label="Situação"><StatusBadge status={r.active ? 'Ativa' : 'Inativa'} /></td>
+                    <td data-label="Atualizada em" className="nowrap">{r.updatedAt || '-'}</td>
+                    <td data-label="">
                       <div className="row-actions">
-                        <button className="btn ghost" disabled={busy} onClick={() => setModalRule(r)}>✎</button>
-                        <button className="btn ghost" disabled={busy} onClick={() => setModalRule({ ...r, id: '', name: `${r.name} (cópia)` })}>⧉</button>
-                        <button className="btn danger" disabled={busy} onClick={() => remove(r)}>🗑</button>
+                        <button className="btn ghost sm" title="Editar" aria-label="Editar" disabled={busy} onClick={() => setModalRule(r)}><Icon name="edit" /></button>
+                        <button className="btn ghost sm" title="Duplicar" aria-label="Duplicar" disabled={busy} onClick={() => setModalRule({ ...r, id: '', name: `${r.name} (cópia)` })}><Icon name="copy" /></button>
+                        <button className="btn ghost sm" title="Excluir" aria-label="Excluir" disabled={busy} style={{ color: 'var(--red)' }} onClick={() => remove(r)}><Icon name="trash" /></button>
                       </div>
                     </td>
                   </tr>
@@ -119,59 +154,82 @@ export function ShippingRulesPage() {
         )}
       </Panel>
 
-      {modalRule ? <RuleModal rule={modalRule} busy={busy} onClose={() => setModalRule(null)} onSave={save} /> : null}
+      {modalRule ? <RuleModal rule={modalRule} carriers={carrierItems} busy={busy} error={feedback && !feedback.ok ? feedback.text : ''} onClose={() => { setModalRule(null); setFeedback(null); }} onSave={save} /> : null}
     </div>
   );
 }
 
-function RuleModal({ rule, busy, onClose, onSave }: { rule: ShippingRule; busy: boolean; onClose: () => void; onSave: (rule: ShippingRule) => void }) {
+function RuleModal({ rule, carriers, busy, error, onClose, onSave }: { rule: ShippingRule; carriers: any[]; busy: boolean; error: string; onClose: () => void; onSave: (rule: ShippingRule) => void }) {
   const [form, setForm] = useState<ShippingRule>(rule);
   const set = (k: keyof ShippingRule, v: any) => setForm((p) => ({ ...p, [k]: v }));
+  const setCond = (k: string, v: string) => setForm((p) => ({ ...p, conditions: { ...p.conditions, [k]: v } }));
+  const c = form.conditions || {};
+  const carrierAction = CARRIER_ACTIONS.includes(form.actionType);
 
   return (
-    <div className="modal-backdrop">
-      <div className="modal">
-        <div className="panel-head"><h3>{rule.id ? 'Editar Regra de Frete' : 'Nova Regra de Frete'}</h3><button className="btn ghost" onClick={onClose}>Fechar</button></div>
-        <div className="panel-body grid">
-          <Panel title="Informações gerais">
-            <div className="form-grid">
-              <input className="input" placeholder="Nome" value={form.name} onChange={(e) => set('name', e.target.value)} />
-              <input className="input" type="number" placeholder="Prioridade" value={form.priority} onChange={(e) => set('priority', Number(e.target.value))} />
-              <select className="select" value={String(form.active)} onChange={(e) => set('active', e.target.value === 'true')}><option value="true">Ativa</option><option value="false">Inativa</option></select>
-              <input className="input" type="date" value={form.validFrom} onChange={(e) => set('validFrom', e.target.value)} />
-              <input className="input" type="date" value={form.validTo} onChange={(e) => set('validTo', e.target.value)} />
-              <input className="input full" placeholder="Descrição" value={form.description} onChange={(e) => set('description', e.target.value)} />
-            </div>
-          </Panel>
+    <Modal title={rule.id ? 'Editar regra de frete' : 'Nova regra de frete'} onClose={onClose}>
+      <div className="form-grid">
+        <div className="form-section">Informações gerais</div>
+        <Field label="Nome" required className="span-2"><input className="input" value={form.name} onChange={(e) => set('name', e.target.value)} /></Field>
+        <Field label="Prioridade" hint="Menor número = aplicada primeiro"><input className="input" type="number" min={0} value={form.priority} onChange={(e) => set('priority', Number(e.target.value))} /></Field>
+        <Field label="Situação">
+          <select className="select" value={String(form.active)} onChange={(e) => set('active', e.target.value === 'true')}><option value="true">Ativa</option><option value="false">Inativa</option></select>
+        </Field>
+        <Field label="Válida a partir de"><input className="input" type="date" value={form.validFrom} onChange={(e) => set('validFrom', e.target.value)} /></Field>
+        <Field label="Válida até"><input className="input" type="date" value={form.validTo} onChange={(e) => set('validTo', e.target.value)} /></Field>
+        <Field label="Descrição" className="full"><input className="input" value={form.description} onChange={(e) => set('description', e.target.value)} /></Field>
 
-          <Panel title="Condições">
-            <div className="form-grid">
-              <input className="input" placeholder="Canal" value={form.channel} onChange={(e) => set('channel', e.target.value)} />
-              <input className="input" placeholder="ID da transportadora" value={form.carrier} onChange={(e) => set('carrier', e.target.value)} />
-              <input className="input" placeholder="Faixa CEP (ex: 01000000-05999999)" value={form.conditions?.cepRange || ''} onChange={(e) => set('conditions', { ...form.conditions, cepRange: e.target.value })} />
-              <input className="input" placeholder="Cidade" value={form.conditions?.city || ''} onChange={(e) => set('conditions', { ...form.conditions, city: e.target.value })} />
-              <input className="input" placeholder="UF" value={form.conditions?.state || ''} onChange={(e) => set('conditions', { ...form.conditions, state: e.target.value })} />
-              <input className="input" placeholder="SKU" value={form.conditions?.sku || ''} onChange={(e) => set('conditions', { ...form.conditions, sku: e.target.value })} />
-              <input className="input" placeholder="Categoria" value={form.conditions?.category || ''} onChange={(e) => set('conditions', { ...form.conditions, category: e.target.value })} />
-              <input className="input" placeholder="Faixa de peso (kg, ex: 0-10)" value={form.conditions?.weightRange || ''} onChange={(e) => set('conditions', { ...form.conditions, weightRange: e.target.value })} />
-              <input className="input" placeholder="Faixa valor pedido (ex: 0-500)" value={form.conditions?.orderValueRange || ''} onChange={(e) => set('conditions', { ...form.conditions, orderValueRange: e.target.value })} />
-              <select className="select" value={form.conditions?.customerType || 'PF/PJ'} onChange={(e) => set('conditions', { ...form.conditions, customerType: e.target.value })}><option>PF/PJ</option><option>PF</option><option>PJ</option></select>
-            </div>
-          </Panel>
+        <div className="form-section">Quando aplicar (deixe em branco para “qualquer”)</div>
+        <Field label="Canal de venda">
+          <select className="select" value={form.channel} onChange={(e) => set('channel', e.target.value)}>
+            <option value="">Todos</option>
+            <option value="shopee">Shopee</option>
+            <option value="magalu">Magalu</option>
+            <option value="tiny">Tiny ERP</option>
+          </select>
+        </Field>
+        <Field label="Transportadora">
+          <select className="select" value={form.carrier} onChange={(e) => set('carrier', e.target.value)}>
+            <option value="">Todas</option>
+            {carriers.map((cr) => <option key={cr.id} value={cr.id}>{cr.name}</option>)}
+          </select>
+        </Field>
+        <Field label="Tipo de cliente">
+          <select className="select" value={c.customerType || 'PF/PJ'} onChange={(e) => setCond('customerType', e.target.value)}>
+            <option value="PF/PJ">Pessoa física e jurídica</option><option value="PF">Pessoa física</option><option value="PJ">Pessoa jurídica</option>
+          </select>
+        </Field>
+        <Field label="Faixa de CEP" hint="Ex.: 01000000-05999999"><input className="input" value={c.cepRange || ''} onChange={(e) => setCond('cepRange', e.target.value)} /></Field>
+        <Field label="Cidade"><input className="input" value={c.city || ''} onChange={(e) => setCond('city', e.target.value)} /></Field>
+        <Field label="UF"><input className="input" maxLength={2} value={c.state || ''} onChange={(e) => setCond('state', e.target.value.toUpperCase())} /></Field>
+        <Field label="SKU"><input className="input" value={c.sku || ''} onChange={(e) => setCond('sku', e.target.value)} /></Field>
+        <Field label="Categoria"><input className="input" value={c.category || ''} onChange={(e) => setCond('category', e.target.value)} /></Field>
+        <Field label="Faixa de peso (kg)" hint="Ex.: 0-10"><input className="input" value={c.weightRange || ''} onChange={(e) => setCond('weightRange', e.target.value)} /></Field>
+        <Field label="Faixa de valor do pedido (R$)" hint="Ex.: 0-500"><input className="input" value={c.orderValueRange || ''} onChange={(e) => setCond('orderValueRange', e.target.value)} /></Field>
 
-          <Panel title="Ação da regra">
-            <div className="form-grid">
-              <select className="select" value={form.actionType} onChange={(e) => set('actionType', e.target.value)}>{ACTION_OPTIONS.map((a) => <option key={a}>{a}</option>)}</select>
-              <input className="input" placeholder="Valor (%, R$, dias, ou ID da transportadora)" value={form.value} onChange={(e) => set('value', e.target.value)} />
-            </div>
-          </Panel>
-
-          <div className="filter-row" style={{ justifyContent: 'flex-end' }}>
-            <button className="btn" onClick={onClose}>Cancelar</button>
-            <button className="btn primary" disabled={busy || !form.name.trim()} onClick={() => onSave(form)}>Salvar Regra</button>
-          </div>
-        </div>
+        <div className="form-section">O que fazer</div>
+        <Field label="Ação" required>
+          <select className="select" value={form.actionType} onChange={(e) => setForm((p) => ({ ...p, actionType: e.target.value, value: '' }))}>{ACTION_OPTIONS.map((a) => <option key={a}>{a}</option>)}</select>
+        </Field>
+        {form.actionType === 'Frete grátis' ? null : carrierAction ? (
+          <Field label="Transportadora da ação" required>
+            <select className="select" value={form.value} onChange={(e) => set('value', e.target.value)}>
+              <option value="">Escolha...</option>
+              {carriers.map((cr) => <option key={cr.id} value={cr.id}>{cr.name}</option>)}
+            </select>
+          </Field>
+        ) : (
+          <Field label="Valor" required hint={VALUE_HINT[form.actionType]}>
+            <input className="input" inputMode="decimal" value={form.value} onChange={(e) => set('value', e.target.value.replace(',', '.'))} />
+          </Field>
+        )}
       </div>
-    </div>
+
+      {error ? <div className="notice err">{error}</div> : null}
+      <div className="form-actions">
+        <button className="btn" onClick={onClose}>Cancelar</button>
+        <button className="btn primary" disabled={busy || !form.name.trim()} onClick={() => onSave(form)}>{busy ? 'Salvando...' : 'Salvar regra'}</button>
+      </div>
+    </Modal>
   );
 }
