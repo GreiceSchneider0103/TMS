@@ -9,6 +9,7 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { LoadingState } from '@/components/ui/LoadingState';
 import { ErrorState } from '@/components/ui/ErrorState';
 import { Icon } from '@/components/ui/Icon';
+import { OrderInvoices } from './OrderInvoices';
 import { channelLabel, formatCep, formatDateTime, formatMoney, formatNumber } from '@/services/format';
 
 export function OrderDetail({ id }: { id: string }) {
@@ -81,6 +82,8 @@ export function OrderDetail({ id }: { id: string }) {
           )}
         </Panel>
       </div>
+
+      <OrderInvoices orderId={order.id || id} channel={order.channel} />
 
       <Panel title="Itens do pedido">
         {items.length === 0 && skus.length === 0 ? <EmptyState text="Pedido sem itens vinculados." /> : items.length === 0 ? (

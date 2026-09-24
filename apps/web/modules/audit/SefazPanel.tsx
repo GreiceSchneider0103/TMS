@@ -23,6 +23,8 @@ function certStatus(validTo?: string | null) {
 
 export function SefazPanel() {
   const { data, loading, error, reload } = useApi(() => api('/ctes/sefaz-status'), []);
+  const schedule = useApi(() => api('/ctes/sefaz-schedule'), []);
+  const sch = (schedule.data as any) || null;
   const [certCompany, setCertCompany] = useState<any>(null);
   const [busyId, setBusyId] = useState('');
   const [feedback, setFeedback] = useState<{ ok: boolean; text: string } | null>(null);
@@ -66,6 +68,14 @@ export function SefazPanel() {
         (como tomador, remetente ou destinatário). O certificado e a senha ficam guardados criptografados.
         {env === 'homologacao' ? ' Ambiente atual: homologação (testes).' : ''}
       </div>
+      {sch ? (
+        <div className={`notice ${sch.enabled ? 'ok' : 'warn'}`}>
+          {sch.enabled
+            ? <>Busca automática: todos os dias às {sch.hours.map((h: number) => `${String(h).padStart(2, '0')}h`).join(' e ')} (horário de Brasília), só para empresas com certificado e quando há notas fiscais sem CT-e.</>
+            : <>Busca automática desligada no servidor.</>}
+          {sch.lastRunAt ? <> Última execução: {formatDateTime(sch.lastRunAt)}.</> : null}
+        </div>
+      ) : null}
       {feedback ? <div className={`notice ${feedback.ok ? 'ok' : 'err'}`}>{feedback.text}</div> : null}
 
       <Panel title="Empresas" right={<button className="btn sm" onClick={reload}><Icon name="refresh" />Atualizar</button>}>

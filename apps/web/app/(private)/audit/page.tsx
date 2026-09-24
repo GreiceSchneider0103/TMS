@@ -5,9 +5,11 @@ import { PageHeader } from '@/components/ui/PageHeader';
 import { Reconciliation } from '@/modules/audit/Reconciliation';
 import { CteList } from '@/modules/audit/CteList';
 import { SefazPanel } from '@/modules/audit/SefazPanel';
+import { InvoiceList } from '@/modules/audit/InvoiceList';
 
 const TABS = [
   { key: 'conciliacao', label: 'Conciliação' },
+  { key: 'notas', label: 'Notas fiscais' },
   { key: 'ctes', label: 'CT-es' },
   { key: 'sefaz', label: 'Certificado e SEFAZ' }
 ];
@@ -26,7 +28,7 @@ function AuditInner() {
           <button key={t.key} role="tab" aria-selected={tab === t.key} className={`tab ${tab === t.key ? 'active' : ''}`} onClick={() => go(t.key)}>{t.label}</button>
         ))}
       </div>
-      {tab === 'conciliacao' ? <Reconciliation onGoToCtes={() => go('ctes')} /> : tab === 'ctes' ? <CteList /> : <SefazPanel />}
+      {tab === 'conciliacao' ? <Reconciliation onGoToCtes={() => go('ctes')} /> : tab === 'notas' ? <InvoiceList /> : tab === 'ctes' ? <CteList /> : <SefazPanel />}
     </div>
   );
 }
