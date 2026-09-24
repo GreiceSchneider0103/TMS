@@ -10,6 +10,7 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { ErrorState } from '@/components/ui/ErrorState';
 import { Field } from '@/components/ui/Field';
 import { Icon } from '@/components/ui/Icon';
+import { downloadBase64 } from '@/services/files';
 import { formatDate, formatDateTime, formatNumber } from '@/services/format';
 
 const COUNT_LABELS: Record<string, string> = {
@@ -32,6 +33,7 @@ export function FreightManager() {
   const [file, setFile] = useState<File | null>(null);
   const [feedback, setFeedback] = useState<{ ok: boolean; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
+  const [downloading, setDownloading] = useState('');
   const fileInput = useRef<HTMLInputElement>(null);
   const tables = useApi(() => api('/freight-tables'), []);
   const carriers = useApi(() => api('/carriers'), []);
@@ -79,6 +81,19 @@ export function FreightManager() {
       setFeedback({ ok: false, text: `Falha ao importar a planilha: ${error.message}` });
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function download(row: any) {
+    setDownloading(row.version_id);
+    try {
+      const res = await api(`/freight-tables/versions/${row.version_id}/download`);
+      downloadBase64(res.fileName, res.mimeType, res.contentBase64);
+      if (!res.original) setFeedback({ ok: true, text: `A planilha original de "${row.name}" não foi guardada na importação; baixamos uma planilha gerada a partir das rotas cadastradas.` });
+    } catch (error: any) {
+      setFeedback({ ok: false, text: `Não foi possível baixar a planilha: ${error.message}` });
+    } finally {
+      setDownloading('');
     }
   }
 
@@ -153,6 +168,7 @@ export function FreightManager() {
                     <td data-label="Publicada em" className="nowrap">{r.published_at ? formatDateTime(r.published_at) : '-'}</td>
                     <td data-label="" className="text-right">
                       <div className="row-actions">
+                        <button className="btn ghost sm" title="Baixar planilha" disabled={!r.version_id || downloading === r.version_id} onClick={() => download(r)}><Icon name="download" />{downloading === r.version_id ? 'Baixando...' : 'Baixar'}</button>
                         {r.status === 'DRAFT' ? (
                           <button className="btn primary sm" disabled={busy || !r.version_id} onClick={() => runVersionAction('publish', r)}>Publicar</button>
                         ) : r.status === 'PUBLISHED' ? (

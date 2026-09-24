@@ -27,6 +27,7 @@ type FieldDef = {
   maxLength?: number;
   full?: boolean;
   group?: 'logistics';
+  defaultValue?: string;
 };
 
 type Column = { label: string; render: (row: Row, l: Lookups) => React.ReactNode; right?: boolean };
@@ -49,12 +50,14 @@ const RESOURCES: Resource[] = [
     key: 'carriers', label: 'Transportadoras', singular: 'transportadora', fem: true,
     fields: [
       { key: 'name', from: 'name', label: 'Nome', required: true },
+      { key: 'cnpj', from: 'cnpj', label: 'CNPJ', type: 'digits', maxLength: 18, hint: 'Usado para vincular os CT-es emitidos por ela' },
       { key: 'externalName', from: 'external_name', label: 'Nome nas tabelas/marketplaces', hint: 'Como a transportadora aparece nas planilhas de frete' },
       { key: 'priority', from: 'priority', label: 'Prioridade', type: 'number', hint: 'Menor número = preferida em caso de empate' },
       { key: 'isActive', from: 'is_active', label: 'Ativa', type: 'checkbox' }
     ],
     columns: [
       { label: 'Nome', render: (r) => r.name },
+      { label: 'CNPJ', render: (r) => (r.cnpj ? formatDocument(r.cnpj) : '-') },
       { label: 'Nome nas tabelas', render: (r) => r.external_name || '-' },
       { label: 'Prioridade', render: (r) => r.priority, right: true },
       { label: 'Situação', render: active }
@@ -109,17 +112,22 @@ const RESOURCES: Resource[] = [
   {
     key: 'products', label: 'Produtos', singular: 'produto',
     fields: [
+      { key: 'companyId', from: 'company_id', label: 'Empresa', type: 'select', options: (l) => l.companies.map((c) => [c.id, c.trade_name]), hint: 'O mesmo SKU pode existir em empresas diferentes' },
       { key: 'skuInternal', from: 'sku_internal', label: 'SKU interno', required: true },
       { key: 'skuExternal', from: 'sku_external', label: 'SKU no marketplace' },
       { key: 'name', from: 'name', label: 'Nome', required: true },
       { key: 'category', from: 'category', label: 'Categoria' },
-      { key: 'weightKg', from: 'weight_kg', label: 'Peso (kg)', type: 'number', group: 'logistics' },
-      { key: 'lengthCm', from: 'length_cm', label: 'Comprimento (cm)', type: 'number', group: 'logistics' },
-      { key: 'widthCm', from: 'width_cm', label: 'Largura (cm)', type: 'number', group: 'logistics' },
-      { key: 'heightCm', from: 'height_cm', label: 'Altura (cm)', type: 'number', group: 'logistics' }
+      // Peso e medidas em qualquer unidade: a API converte para kg/cm usados nas tabelas de frete.
+      { key: 'weight', from: 'weight_kg', label: 'Peso', type: 'number', group: 'logistics' },
+      { key: 'weightUnit', from: '__weight_unit', label: 'Unidade do peso', type: 'select', group: 'logistics', defaultValue: 'kg', options: [['g', 'gramas (g)'], ['kg', 'quilos (kg)'], ['t', 'toneladas (t)'], ['lb', 'libras (lb)'], ['oz', 'onças (oz)']] },
+      { key: 'length', from: 'length_cm', label: 'Comprimento', type: 'number', group: 'logistics' },
+      { key: 'width', from: 'width_cm', label: 'Largura', type: 'number', group: 'logistics' },
+      { key: 'height', from: 'height_cm', label: 'Altura', type: 'number', group: 'logistics' },
+      { key: 'dimensionUnit', from: '__dimension_unit', label: 'Unidade das medidas', type: 'select', group: 'logistics', defaultValue: 'cm', options: [['mm', 'milímetros (mm)'], ['cm', 'centímetros (cm)'], ['m', 'metros (m)'], ['pol', 'polegadas (pol)']] }
     ],
     columns: [
       { label: 'SKU', render: (r) => r.sku_internal },
+      { label: 'Empresa', render: (r) => r.company_name || '-' },
       { label: 'Nome', render: (r) => r.name },
       { label: 'Categoria', render: (r) => r.category || '-' },
       { label: 'Peso', render: (r) => (r.weight_kg != null ? `${formatNumber(r.weight_kg)} kg` : '-'), right: true },
@@ -238,7 +246,7 @@ function RecordModal({ resource, row, lookups, onClose, onSaved }: { resource: R
     const initial: Record<string, any> = {};
     for (const f of resource.fields) {
       const v = row[f.from];
-      initial[f.key] = f.type === 'checkbox' ? v !== false : v == null ? '' : String(v);
+      initial[f.key] = f.type === 'checkbox' ? v !== false : v == null ? f.defaultValue ?? '' : String(v);
     }
     return initial;
   });
@@ -262,8 +270,9 @@ function RecordModal({ resource, row, lookups, onClose, onSaved }: { resource: R
     const missing = resource.fields.find((f) => f.required && !String(form[f.key] ?? '').trim());
     if (missing) return setError(`Preencha o campo "${missing.label}".`);
     const logistics = Object.fromEntries(logisticsFields.map((f) => [f.key, toValue(f)]));
-    const hasLogistics = logisticsFields.some((f) => String(form[f.key] ?? '').trim());
-    if (hasLogistics && logisticsFields.some((f) => !String(form[f.key] ?? '').trim())) return setError('Informe peso e as três medidas do produto (ou deixe todos em branco).');
+    const measureFields = logisticsFields.filter((f) => f.type === 'number');
+    const hasLogistics = measureFields.some((f) => String(form[f.key] ?? '').trim());
+    if (hasLogistics && measureFields.some((f) => !String(form[f.key] ?? '').trim())) return setError('Informe peso e as três medidas do produto (ou deixe todos em branco).');
 
     const body: Record<string, any> = {};
     for (const f of mainFields) {

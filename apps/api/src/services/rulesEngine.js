@@ -15,7 +15,7 @@ export function applyShippingRules(options, rules, ctx) {
         if (!matches(rule, ctx, option)) continue;
         const action = rule.actions || {};
 
-        if (action.block_carrier && String(action.block_carrier) === String(option.carrierId)) {
+        if (listIncludes(action.block_carriers ?? action.block_carrier, option.carrierId)) {
           blocked = true;
           appliedRules.push(`${rule.name}:block_carrier`);
         }
@@ -47,7 +47,7 @@ export function applyShippingRules(options, rules, ctx) {
           days += Number(action.add_days);
           appliedRules.push(`${rule.name}:add_days`);
         }
-        if (action.prioritize_carrier && String(action.prioritize_carrier) === String(option.carrierId)) {
+        if (listIncludes(action.prioritize_carriers ?? action.prioritize_carrier, option.carrierId)) {
           option.priorityBoost = -10;
           appliedRules.push(`${rule.name}:prioritize_carrier`);
         }
@@ -68,9 +68,10 @@ function inValidity(rule, date) {
 
 function matches(rule, ctx, option) {
   const c = rule.conditions || {};
-  if (c.channel && c.channel !== ctx.channel) return false;
-  if (c.carrier_id && String(c.carrier_id) !== String(option.carrierId)) return false;
-  if (c.state && c.state !== ctx.state) return false;
+  // Listas vazias (ou ausentes) significam "qualquer". Os campos singulares antigos continuam valendo.
+  if (!anyOf(c.channels ?? c.channel, ctx.channel)) return false;
+  if (!anyOf(c.carrier_ids ?? c.carrier_id, option.carrierId)) return false;
+  if (!anyOf(c.states ?? c.state, ctx.state)) return false;
   if (c.city && c.city.toLowerCase() !== String(ctx.city || '').toLowerCase()) return false;
   if (c.recipient_type && c.recipient_type !== ctx.recipientType) return false;
   if (c.cep_start && c.cep_end) {
@@ -84,6 +85,22 @@ function matches(rule, ctx, option) {
   if (c.sku && !ctx.skus?.includes(c.sku)) return false;
   if (c.category && !ctx.categories?.includes(c.category)) return false;
   return true;
+}
+
+function toList(value) {
+  if (value === null || value === undefined || value === '') return [];
+  return (Array.isArray(value) ? value : [value]).map((v) => String(v).trim().toLowerCase()).filter(Boolean);
+}
+
+function anyOf(allowed, actual) {
+  const list = toList(allowed);
+  if (!list.length) return true;
+  return list.includes(String(actual ?? '').trim().toLowerCase());
+}
+
+function listIncludes(value, actual) {
+  const list = toList(value);
+  return list.length > 0 && list.includes(String(actual ?? '').trim().toLowerCase());
 }
 
 const round2 = (n) => Number(Number(n).toFixed(2));

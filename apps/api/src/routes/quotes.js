@@ -4,9 +4,13 @@ import { calculateRouteQuote, computeWeights } from '../services/freightEngine.j
 import { applyShippingRules } from '../services/rulesEngine.js';
 import { requireAnyRole } from '../utils/context.js';
 import { logAudit } from '../services/audit.js';
+import { normalizeMeasures } from '../services/units.js';
 
 export function registerQuoteRoutes(app) {
-  app.post('/quotes/manual', requireAnyRole(['operador_logistico'], async ({ ctx, body }) => {
+  app.post('/quotes/manual', requireAnyRole(['operador_logistico'], async ({ ctx, body: rawBody }) => {
+    // Peso e medidas podem chegar em qualquer unidade; o motor de frete usa kg/cm.
+    const measures = Object.fromEntries(Object.entries(normalizeMeasures(rawBody)).filter(([, v]) => v !== null));
+    const body = { ...rawBody, ...measures };
     const requestHash = hashRequest(body);
     const quote = await createAndCalculateQuote({ accountId: ctx.accountId, body, requestHash });
     await logAudit({ accountId: ctx.accountId, userId: ctx.userId, entity: 'quote_request', entityId: quote.request.id, action: 'manual_quote', afterData: { resultCount: quote.results.length }, correlationId: ctx.correlationId });

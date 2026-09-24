@@ -1,5 +1,6 @@
 import { query } from '../db.js';
 import { requireAnyRole } from '../utils/context.js';
+import { normalizeMeasures } from '../services/units.js';
 
 export function registerProductLogisticsRoutes(app) {
   app.get('/product-logistics/:productId', requireAnyRole(['admin', 'operador_logistico', 'visualizador'], async ({ ctx, params }) => {
@@ -64,12 +65,14 @@ export function registerProductLogisticsRoutes(app) {
 }
 
 function normalizeLogisticsInput(body = {}) {
+  // Aceita qualquer unidade (weight + weightUnit, length/width/height + dimensionUnit) e converte para kg/cm.
+  const m = normalizeMeasures(body);
   return {
     productId: body.productId || null,
-    weightKg: toNumberOrNull(body.weightKg),
-    lengthCm: toNumberOrNull(body.lengthCm),
-    widthCm: toNumberOrNull(body.widthCm),
-    heightCm: toNumberOrNull(body.heightCm),
+    weightKg: m.weightKg,
+    lengthCm: m.lengthCm,
+    widthCm: m.widthCm,
+    heightCm: m.heightCm,
     cubingFactor: toNumberOrNull(body.cubingFactor) ?? 300,
     classification: body.classification ?? null,
     restrictions: body.restrictions ?? {}
@@ -78,10 +81,10 @@ function normalizeLogisticsInput(body = {}) {
 
 function validate(body) {
   if (!isPositive(body.weightKg) || !isPositive(body.lengthCm) || !isPositive(body.widthCm) || !isPositive(body.heightCm)) {
-    throw new Error('weightKg, lengthCm, widthCm and heightCm must be > 0');
+    throw new Error('Informe peso, comprimento, largura e altura maiores que zero.');
   }
   if (!isPositive(body.cubingFactor)) {
-    throw new Error('cubingFactor must be > 0');
+    throw new Error('O fator de cubagem deve ser maior que zero.');
   }
 }
 

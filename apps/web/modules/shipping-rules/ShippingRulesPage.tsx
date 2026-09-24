@@ -12,15 +12,16 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { Field } from '@/components/ui/Field';
 import { Modal } from '@/components/ui/Modal';
 import { Icon } from '@/components/ui/Icon';
+import { MultiSelect } from '@/components/ui/MultiSelect';
 import { channelLabel } from '@/services/format';
-import { ACTION_OPTIONS, apiRuleToRule, ruleToApiPayload } from './types';
+import { CHANNEL_OPTIONS, REGION_PRESETS, UF_OPTIONS, describeStates } from '@/services/brazil';
+import { ACTION_OPTIONS, CARRIER_ACTIONS, apiRuleToRule, ruleToApiPayload } from './types';
 import type { ShippingRule } from './types';
 
 const EMPTY_RULE: ShippingRule = {
-  id: '', name: '', description: '', priority: 10, active: true, validFrom: '', validTo: '', channel: '', carrier: '', service: '', region: '', actionType: ACTION_OPTIONS[0], value: '', updatedAt: '', conditions: {}
+  id: '', name: '', description: '', priority: 10, active: true, validFrom: '', validTo: '', channels: [], carriers: [], states: [],
+  actionType: ACTION_OPTIONS[0], value: '', actionCarriers: [], updatedAt: '', conditions: {}
 };
-
-const CARRIER_ACTIONS = ['Bloquear transportadora', 'Priorizar transportadora'];
 const VALUE_HINT: Record<string, string> = {
   'Desconto percentual': 'Percentual (ex.: 10 para 10%)',
   'Adicional percentual': 'Percentual (ex.: 5 para 5%)',
@@ -31,9 +32,11 @@ const VALUE_HINT: Record<string, string> = {
   'Aplicar máximo': 'Valor máximo do frete em R$'
 };
 
+const namesOf = (ids: string[], name: (id: string) => string, all: string) => (ids.length ? ids.map(name).join(', ') : all);
+
 function formatActionValue(rule: ShippingRule, carrierName: (id: string) => string) {
+  if (CARRIER_ACTIONS.includes(rule.actionType)) return namesOf(rule.actionCarriers, carrierName, '-');
   if (!rule.value) return '-';
-  if (CARRIER_ACTIONS.includes(rule.actionType)) return carrierName(rule.value);
   if (rule.actionType.includes('percentual')) return `${rule.value}%`;
   if (rule.actionType === 'Adicionar prazo') return `+${rule.value} dia(s)`;
   return `R$ ${rule.value}`;
@@ -126,15 +129,15 @@ export function ShippingRulesPage() {
         {loading ? <LoadingState text="Carregando regras..." /> : error ? <ErrorState text={error} /> : filtered.length === 0 ? <EmptyState text={rules.length ? 'Nenhuma regra para os filtros selecionados.' : 'Nenhuma regra cadastrada. Clique em “Nova regra” para criar a primeira.'} /> : (
           <div className="table-wrap">
             <table className="stack">
-              <thead><tr><th>Prioridade</th><th>Nome</th><th>Canal</th><th>Região</th><th>Transportadora</th><th>Ação</th><th>Valor</th><th>Situação</th><th>Atualizada em</th><th></th></tr></thead>
+              <thead><tr><th>Prioridade</th><th>Nome</th><th>Canais</th><th>Estados</th><th>Transportadoras</th><th>Ação</th><th>Valor</th><th>Situação</th><th>Atualizada em</th><th></th></tr></thead>
               <tbody>
                 {filtered.map((r) => (
                   <tr key={r.id}>
                     <td data-label="Prioridade">{r.priority}</td>
                     <td className="cell-title">{r.name}{r.description ? <span className="sub">{r.description}</span> : null}</td>
-                    <td data-label="Canal">{r.channel ? channelLabel(r.channel) : 'Todos'}</td>
-                    <td data-label="Região">{r.region || 'Todas'}</td>
-                    <td data-label="Transportadora">{r.carrier ? carrierName(r.carrier) : 'Todas'}</td>
+                    <td data-label="Canais">{namesOf(r.channels, channelLabel, 'Todos')}</td>
+                    <td data-label="Estados">{describeStates(r.states)}</td>
+                    <td data-label="Transportadoras">{namesOf(r.carriers, carrierName, 'Todas')}</td>
                     <td data-label="Ação">{r.actionType}</td>
                     <td data-label="Valor" className="nowrap">{formatActionValue(r, carrierName)}</td>
                     <td data-label="Situação"><StatusBadge status={r.active ? 'Ativa' : 'Inativa'} /></td>
@@ -180,19 +183,14 @@ function RuleModal({ rule, carriers, busy, error, onClose, onSave }: { rule: Shi
         <Field label="Descrição" className="full"><input className="input" value={form.description} onChange={(e) => set('description', e.target.value)} /></Field>
 
         <div className="form-section">Quando aplicar (deixe em branco para “qualquer”)</div>
-        <Field label="Canal de venda">
-          <select className="select" value={form.channel} onChange={(e) => set('channel', e.target.value)}>
-            <option value="">Todos</option>
-            <option value="shopee">Shopee</option>
-            <option value="magalu">Magalu</option>
-            <option value="tiny">Tiny ERP</option>
-          </select>
+        <Field label="Estados de destino" group className="full" hint="Escolha UFs avulsas ou regiões inteiras. Nenhum selecionado = todos os estados.">
+          <MultiSelect options={UF_OPTIONS} value={form.states} onChange={(v) => set('states', v)} allLabel="Todos os estados" presets={REGION_PRESETS} placeholder="Buscar estado..." />
         </Field>
-        <Field label="Transportadora">
-          <select className="select" value={form.carrier} onChange={(e) => set('carrier', e.target.value)}>
-            <option value="">Todas</option>
-            {carriers.map((cr) => <option key={cr.id} value={cr.id}>{cr.name}</option>)}
-          </select>
+        <Field label="Canais de venda" group hint="Nenhum = todos">
+          <MultiSelect options={CHANNEL_OPTIONS} value={form.channels} onChange={(v) => set('channels', v)} allLabel="Todos os canais" />
+        </Field>
+        <Field label="Transportadoras" group hint="Nenhuma = todas">
+          <MultiSelect options={carriers.map((cr) => ({ value: cr.id, label: cr.name }))} value={form.carriers} onChange={(v) => set('carriers', v)} allLabel="Todas as transportadoras" />
         </Field>
         <Field label="Tipo de cliente">
           <select className="select" value={c.customerType || 'PF/PJ'} onChange={(e) => setCond('customerType', e.target.value)}>
@@ -201,7 +199,6 @@ function RuleModal({ rule, carriers, busy, error, onClose, onSave }: { rule: Shi
         </Field>
         <Field label="Faixa de CEP" hint="Ex.: 01000000-05999999"><input className="input" value={c.cepRange || ''} onChange={(e) => setCond('cepRange', e.target.value)} /></Field>
         <Field label="Cidade"><input className="input" value={c.city || ''} onChange={(e) => setCond('city', e.target.value)} /></Field>
-        <Field label="UF"><input className="input" maxLength={2} value={c.state || ''} onChange={(e) => setCond('state', e.target.value.toUpperCase())} /></Field>
         <Field label="SKU"><input className="input" value={c.sku || ''} onChange={(e) => setCond('sku', e.target.value)} /></Field>
         <Field label="Categoria"><input className="input" value={c.category || ''} onChange={(e) => setCond('category', e.target.value)} /></Field>
         <Field label="Faixa de peso (kg)" hint="Ex.: 0-10"><input className="input" value={c.weightRange || ''} onChange={(e) => setCond('weightRange', e.target.value)} /></Field>
@@ -209,14 +206,11 @@ function RuleModal({ rule, carriers, busy, error, onClose, onSave }: { rule: Shi
 
         <div className="form-section">O que fazer</div>
         <Field label="Ação" required>
-          <select className="select" value={form.actionType} onChange={(e) => setForm((p) => ({ ...p, actionType: e.target.value, value: '' }))}>{ACTION_OPTIONS.map((a) => <option key={a}>{a}</option>)}</select>
+          <select className="select" value={form.actionType} onChange={(e) => setForm((p) => ({ ...p, actionType: e.target.value, value: '', actionCarriers: [] }))}>{ACTION_OPTIONS.map((a) => <option key={a}>{a}</option>)}</select>
         </Field>
         {form.actionType === 'Frete grátis' ? null : carrierAction ? (
-          <Field label="Transportadora da ação" required>
-            <select className="select" value={form.value} onChange={(e) => set('value', e.target.value)}>
-              <option value="">Escolha...</option>
-              {carriers.map((cr) => <option key={cr.id} value={cr.id}>{cr.name}</option>)}
-            </select>
+          <Field label={form.actionType === 'Bloquear transportadora' ? 'Transportadoras a bloquear' : 'Transportadoras a priorizar'} required group className="span-2">
+            <MultiSelect options={carriers.map((cr) => ({ value: cr.id, label: cr.name }))} value={form.actionCarriers} onChange={(v) => set('actionCarriers', v)} allLabel="Escolha uma ou mais..." />
           </Field>
         ) : (
           <Field label="Valor" required hint={VALUE_HINT[form.actionType]}>
@@ -228,7 +222,7 @@ function RuleModal({ rule, carriers, busy, error, onClose, onSave }: { rule: Shi
       {error ? <div className="notice err">{error}</div> : null}
       <div className="form-actions">
         <button className="btn" onClick={onClose}>Cancelar</button>
-        <button className="btn primary" disabled={busy || !form.name.trim()} onClick={() => onSave(form)}>{busy ? 'Salvando...' : 'Salvar regra'}</button>
+        <button className="btn primary" disabled={busy || !form.name.trim() || (carrierAction && !form.actionCarriers.length)} onClick={() => onSave(form)}>{busy ? 'Salvando...' : 'Salvar regra'}</button>
       </div>
     </Modal>
   );

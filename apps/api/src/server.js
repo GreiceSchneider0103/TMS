@@ -24,6 +24,7 @@ import { registerShopeeWebhookRoutes } from './routes/shopeeWebhook.js';
 import { registerShopeeIntegrationRoutes } from './routes/shopeeIntegration.js';
 import { registerShippingRuleRoutes } from './routes/shippingRules.js';
 import { registerApiCredentialRoutes } from './routes/apiCredentials.js';
+import { registerFreightAuditRoutes } from './routes/freightAudit.js';
 import { enforceAbuseProtection } from './utils/abuseProtection.js';
 
 const app = router();
@@ -47,6 +48,7 @@ registerShopeeWebhookRoutes(app);
 registerShopeeIntegrationRoutes(app);
 registerShippingRuleRoutes(app);
 registerApiCredentialRoutes(app);
+registerFreightAuditRoutes(app);
 
 app.get('/health', async () => ({ ok: true }));
 
