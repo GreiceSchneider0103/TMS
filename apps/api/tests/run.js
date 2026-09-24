@@ -5,6 +5,7 @@ import { runWorkerPolicyTests } from './workerPolicy.test.js';
 import { runTinyClientTests } from './tinyClient.test.js';
 import { runFreightWorkbookCompatibilityTests } from './freightWorkbookCompatibility.test.js';
 import { runCteAuditTests } from './cteAudit.test.js';
+import { runAnalyticsTests } from './analytics.test.js';
 
 runRbacTests();
 runFreightValidationTests();
@@ -13,5 +14,6 @@ runWorkerPolicyTests();
 runTinyClientTests();
 runFreightWorkbookCompatibilityTests();
 runCteAuditTests();
+runAnalyticsTests();
 
 console.log('ok');

@@ -9,7 +9,7 @@ const parser = new XMLParser({
   parseAttributeValue: false,
   trimValues: true,
   // infNFe só é lista dentro do CT-e (NFs transportadas); na NF-e é o elemento principal.
-  isArray: (name, jpath) => (name === 'infNFe' ? String(jpath).endsWith('infDoc.infNFe') : ['docZip', 'infNF', 'infOutros', 'Comp', 'NFref', 'det'].includes(name))
+  isArray: (name, jpath) => (name === 'infNFe' ? String(jpath).endsWith('infDoc.infNFe') : ['docZip', 'infNF', 'infOutros', 'Comp', 'NFref', 'det', 'infQ'].includes(name))
 });
 
 export function parseXml(xml) {
@@ -46,8 +46,18 @@ export function parseCteXml(xml) {
   const infDoc = pick(inf, 'infCTeNorm', 'infDoc') || {};
   const nfeChaves = (infDoc.infNFe || []).map((n) => text(n.chave)).filter(Boolean);
 
+  // Quantidades da carga (infQ): usa o peso base de cálculo (cobrado) e o peso real/bruto, em kg.
+  const qs = (pick(inf, 'infCTeNorm', 'infCarga', 'infQ') || []).map((q) => ({ unid: text(q.cUnid), tipo: String(text(q.tpMed) || '').toUpperCase(), qtd: num(q.qCarga) }))
+    .filter((q) => q.qtd !== null && (q.unid === '01' || q.unid === '02'))
+    .map((q) => ({ ...q, kg: q.unid === '02' ? q.qtd * 1000 : q.qtd }));
+  const byTipo = (re) => qs.find((q) => re.test(q.tipo))?.kg ?? null;
+  const pesoReal = byTipo(/REAL|BRUTO|AFERIDO/) ?? (qs.length ? Math.min(...qs.map((q) => q.kg)) : null);
+  const pesoCobrado = byTipo(/B\.?\s*C|BASE|CALC|TAXAD|COBRAD/) ?? (qs.length ? Math.max(...qs.map((q) => q.kg)) : null);
+
   return {
     chave,
+    pesoReal,
+    pesoCobrado,
     numero: text(ide.nCT),
     serie: text(ide.serie),
     dataEmissao: text(ide.dhEmi) || text(ide.dEmi),

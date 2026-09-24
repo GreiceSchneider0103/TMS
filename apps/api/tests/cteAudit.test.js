@@ -19,7 +19,7 @@ const SAMPLE = `<?xml version="1.0" encoding="UTF-8"?>
 <rem><CNPJ>98765432000110</CNPJ><xNome>Lessul</xNome></rem>
 <dest><CPF>12345678901</CPF><xNome>Maria</xNome></dest>
 <vPrest><vTPrest>45.90</vTPrest><vRec>45.90</vRec></vPrest>
-<infCTeNorm><infDoc><infNFe><chave>${NFE}</chave></infNFe></infDoc></infCTeNorm>
+<infCTeNorm><infCarga><vCarga>1500.00</vCarga><infQ><cUnid>01</cUnid><tpMed>PESO REAL</tpMed><qCarga>12.5000</qCarga></infQ><infQ><cUnid>01</cUnid><tpMed>PESO BASE CALCULO</tpMed><qCarga>18.0000</qCarga></infQ><infQ><cUnid>03</cUnid><tpMed>VOLUMES</tpMed><qCarga>1</qCarga></infQ></infCarga><infDoc><infNFe><chave>${NFE}</chave></infNFe></infDoc></infCTeNorm>
 </infCte></CTe><protCTe><infProt><chCTe>${CHAVE}</chCTe></infProt></protCTe></cteProc>`;
 
 const VENDA = '41260998765432000110550010000045671000045671';
@@ -70,6 +70,8 @@ export function runCteAuditTests() {
   assert.equal(c.destinatarioDocumento, '12345678901');
   assert.equal(c.valorPrestacao, 45.9);
   assert.deepEqual(c.nfeChaves, [NFE]);
+  assert.equal(c.pesoReal, 12.5);
+  assert.equal(c.pesoCobrado, 18);
   assert.equal(nfeNumberFromKey(NFE), '45678');
   assert.equal(gunzipBase64(zlib.gzipSync(SAMPLE).toString('base64')), SAMPLE);
   assert.throws(() => parseCteXml('<nfeProc/>'));

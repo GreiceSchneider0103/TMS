@@ -10,16 +10,17 @@ export async function saveCte({ accountId, xml, source, nsu = null, companyId = 
 
   const { rows } = await query(
     `insert into app.ctes(account_id, company_id, chave, numero, serie, data_emissao, emitente_cnpj, emitente_nome, tomador_cnpj, remetente_cnpj,
-       destinatario_documento, destinatario_nome, destino_uf, destino_cidade, valor_prestacao, valor_receber, nfe_chaves, carrier_id, source, nsu, xml)
-     values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)
+       destinatario_documento, destinatario_nome, destino_uf, destino_cidade, valor_prestacao, valor_receber, nfe_chaves, carrier_id, source, nsu, xml, peso_cobrado, peso_real)
+     values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23)
      on conflict (account_id, chave) do update set
        valor_prestacao = excluded.valor_prestacao, valor_receber = excluded.valor_receber, nfe_chaves = excluded.nfe_chaves,
        carrier_id = coalesce(app.ctes.carrier_id, excluded.carrier_id), company_id = coalesce(app.ctes.company_id, excluded.company_id),
+       peso_cobrado = excluded.peso_cobrado, peso_real = excluded.peso_real,
        xml = excluded.xml, updated_at = now()
      returning id, shipment_id, (xmax = 0) as created`,
     [accountId, companyId, c.chave, c.numero, c.serie, c.dataEmissao, c.emitenteCnpj, c.emitenteNome, c.tomadorCnpj, c.remetenteCnpj,
       c.destinatarioDocumento, c.destinatarioNome, c.destinoUf, c.destinoCidade, c.valorPrestacao, c.valorReceber, c.nfeChaves,
-      carrier.rows[0]?.id || null, source, nsu, xml]
+      carrier.rows[0]?.id || null, source, nsu, xml, c.pesoCobrado, c.pesoReal]
   );
 
   const row = rows[0];
