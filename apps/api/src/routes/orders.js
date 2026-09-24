@@ -1,6 +1,5 @@
 import crypto from 'node:crypto';
 import { query, transaction } from '../db.js';
-import { TinyClient } from '../services/tinyClient.js';
 import { requireAnyRole } from '../utils/context.js';
 import { logAudit, logSyncJob } from '../services/audit.js';
 import { parseIntWithBounds } from '../utils/validation.js';
@@ -8,8 +7,8 @@ import { HttpError } from '../utils/router.js';
 import { normalizeMeasures, parseDecimal } from '../services/units.js';
 import { addBusinessDays } from '../services/deadlines.js';
 import { processOrderIntake } from '../services/orderIntake.js';
+import { pushTinyStatus, syncTinyOrders } from '../services/tiny/tinySync.js';
 
-const tiny = new TinyClient();
 
 export function registerOrderRoutes(app) {
   app.get('/orders', requireAnyRole(['operador_logistico', 'financeiro', 'visualizador', 'analista_integracao'], async ({ ctx, query: qs }) => {
@@ -181,11 +180,17 @@ export function registerOrderRoutes(app) {
       return s;
     });
 
+    void pushTinyStatus({ accountId: ctx.accountId, orderId: params.id, status: 'DISPATCHED', trackingCode: shipment.tracking_code, carrierName: carrier.rows[0].name });
     await logAudit({ accountId: ctx.accountId, userId: ctx.userId, entity: 'shipment', entityId: shipment.id, action: 'manual_dispatch', afterData: { carrier: carrier.rows[0].name, trackingCode: shipment.tracking_code }, correlationId: ctx.correlationId });
     return { ...shipment, correlationId: ctx.correlationId };
   }));
 
   app.post('/orders/import/tiny', requireAnyRole(['operador_logistico', 'analista_integracao'], async ({ ctx, body }) => {
+    // Sem lista de pedidos no corpo: busca direto no Tiny pela API v3 (conexão em Configurações > Tiny ERP).
+    if (!body.orders) {
+      const result = await syncTinyOrders({ accountId: ctx.accountId, correlationId: ctx.correlationId, daysBack: body.daysBack });
+      return { importedCount: result.imported + result.updated, ...result, correlationId: ctx.correlationId };
+    }
     const idempotencyKey = String(body.idempotencyKey || `tiny-import-${body.page || 1}-${body.limit || 50}`);
 
     const existingJob = await query(
@@ -198,7 +203,7 @@ export function registerOrderRoutes(app) {
 
     let payload;
     try {
-      payload = body.orders ? { orders: body.orders } : await tiny.listOrders({ page: body.page || 1, limit: body.limit || 50, correlationId: ctx.correlationId });
+      payload = { orders: body.orders };
       await logSyncJob({ accountId: ctx.accountId, kind: 'tiny_import_orders', status: 'success', payload: body, response: payload, idempotencyKey, correlationId: ctx.correlationId });
     } catch (error) {
       await logSyncJob({

@@ -2,6 +2,7 @@ import { query, transaction } from '../db.js';
 import { requireAnyRole } from '../utils/context.js';
 import { normalizeTrackingStatus } from '../../../../workers/src/trackingPolling.js';
 import { logAudit } from '../services/audit.js';
+import { pushTinyStatus } from '../services/tiny/tinySync.js';
 
 export function registerTrackingRoutes(app) {
   app.post('/tracking/webhook/:provider', requireAnyRole(['operador_logistico', 'analista_integracao'], async ({ ctx, params, body }) => {
@@ -42,8 +43,9 @@ export function registerTrackingRoutes(app) {
       }
 
       await client.query('update app.webhook_logs set status = $1, processed_at = now() where id = $2', ['processed', log.rows[0].id]);
-      return evt.rows[0] || null;
+      return evt.rows[0] ? { ...evt.rows[0], orderId: shipmentQ.rows[0].order_id } : null;
     });
+    if (saved) void pushTinyStatus({ accountId: ctx.accountId, orderId: saved.orderId, status: saved.macro_status });
 
     await logAudit({ accountId: ctx.accountId, userId: ctx.userId, entity: 'tracking_event', entityId: saved?.id || eventKey, action: 'tracking_webhook', afterData: { provider: params.provider, shipmentId: body.shipmentId, status: body.status }, correlationId: ctx.correlationId });
     return { processed: true, deduped: !saved, event: saved, correlationId: ctx.correlationId };

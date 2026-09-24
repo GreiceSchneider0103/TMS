@@ -78,9 +78,9 @@ const STATUS: Record<string, [string, Tone]> = {
 
 // Rótulos que já chegam em português (ex.: "Ativa", "Revogada") mantêm o texto e só ganham a cor.
 const PT_TONES: Record<string, Tone> = {
-  ativa: 'success', ativo: 'success', aprovado: 'success', selecionada: 'success', conectada: 'success', publicada: 'success', entregue: 'success',
+  ativa: 'success', ativo: 'success', aprovado: 'success', selecionada: 'success', conectada: 'success', conectado: 'success', publicada: 'success', entregue: 'success',
   pendente: 'warning', rascunho: 'warning', sandbox: 'warning', 'em desenvolvimento': 'warning', 'produção': 'success', 'disponível': 'neutral', 'em trânsito': 'warning', 'não implementada': 'warning',
-  inativa: 'neutral', inativo: 'neutral', revogada: 'error', erro: 'error', desconectada: 'error',
+  inativa: 'neutral', inativo: 'neutral', revogada: 'error', erro: 'error', desconectada: 'error', desconectado: 'error', 'não conectado': 'neutral',
   'válido': 'success', vencido: 'error', 'sem certificado': 'neutral', 'sem vínculo': 'warning', 'sem pedido': 'warning', recebido: 'success', ignorado: 'neutral', 'sucesso com falhas': 'warning'
 };
 
@@ -94,7 +94,7 @@ export function statusInfo(status: unknown): { label: string; tone: Tone } {
 
 export const ORDER_STATUS_OPTIONS = ['READY_FOR_QUOTE', 'QUOTED', 'DISPATCHED', 'IN_TRANSIT', 'OUT_FOR_DELIVERY', 'DELIVERED', 'EXCEPTION', 'RETURNED', 'CANCELED'];
 
-const CHANNELS: Record<string, string> = { shopee: 'Shopee', tiny: 'Tiny ERP', magalu: 'Magalu', manual: 'Manual', mercadolivre: 'Mercado Livre', site: 'Site próprio' };
+const CHANNELS: Record<string, string> = { shopee: 'Shopee', tiny: 'Tiny ERP', magalu: 'Magalu', manual: 'Manual', mercadolivre: 'Mercado Livre', site: 'Site próprio', amazon: 'Amazon', shein: 'Shein', tiktok: 'TikTok Shop', americanas: 'Americanas' };
 export function channelLabel(channel: unknown): string {
   const c = String(channel || '').toLowerCase();
   return CHANNELS[c] || (c ? c.charAt(0).toUpperCase() + c.slice(1) : '-');
@@ -104,6 +104,9 @@ export function channelLabel(channel: unknown): string {
 const EVENT_LABELS: Record<string, string> = {
   tiny_import_orders: 'Importação de pedidos (Tiny)',
   tiny_status_sync: 'Atualização de status (Tiny)',
+  tiny_import_products: 'Importação de produtos (Tiny)',
+  tiny_sync: 'Sincronização Tiny',
+  erp_connection: 'Conexão com ERP',
   shopee_sync: 'Sincronização Shopee',
   shopee_dispatch: 'Despacho na Shopee',
   tiny: 'Tiny ERP',

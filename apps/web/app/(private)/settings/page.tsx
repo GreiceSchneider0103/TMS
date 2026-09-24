@@ -11,6 +11,7 @@ import { EmptyState } from '@/components/ui/EmptyState';
 import { Field } from '@/components/ui/Field';
 import { Icon } from '@/components/ui/Icon';
 import { formatDate, formatDateTime, roleLabel } from '@/services/format';
+import { TinyPanel } from '@/modules/settings/TinyPanel';
 
 type Feedback = { ok: boolean; text: string } | null;
 
@@ -19,11 +20,7 @@ export default function SettingsPage() {
     <div className="grid">
       <PageHeader title="Configurações" subtitle="Integrações e chaves de acesso" />
       <ShopeePanel />
-      <Panel title="Tiny ERP" subtitle="Importação de pedidos e atualização de status" right={<StatusBadge status="Em desenvolvimento" />}>
-        <div className="notice warn">
-          A integração automática com o Tiny ERP ainda está em desenvolvimento. Por enquanto os pedidos do Tiny não são importados automaticamente.
-        </div>
-      </Panel>
+      <TinyPanel />
       <ApiKeysPanel />
     </div>
   );

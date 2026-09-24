@@ -4,6 +4,7 @@ import { requireAnyRole } from '../utils/context.js';
 import { logAudit } from '../services/audit.js';
 import { HttpError } from '../utils/router.js';
 import { addBusinessDays } from '../services/deadlines.js';
+import { pushTinyStatus } from '../services/tiny/tinySync.js';
 
 export function registerShipmentRoutes(app) {
   app.get('/shipments', requireAnyRole(['operador_logistico', 'financeiro', 'visualizador'], async ({ ctx }) => {
@@ -94,6 +95,7 @@ export function registerShipmentRoutes(app) {
       return shipment;
     });
 
+    void pushTinyStatus({ accountId: ctx.accountId, orderId: body.orderId, status: 'DISPATCHED', trackingCode: result.tracking_code });
     await logAudit({ accountId: ctx.accountId, userId: ctx.userId, entity: 'shipment', entityId: result.id, action: 'create_shipment', afterData: { ...body, idempotencyKey }, correlationId: ctx.correlationId });
     return { ...result, correlationId: ctx.correlationId };
   }));
@@ -137,9 +139,10 @@ export function registerManualTrackingRoutes(app) {
         [ctx.accountId, params.id, status, occurredAt.toISOString(), receiver, body.notes ? String(body.notes) : null]
       );
       await client.query('update app.orders set status = $3::app.order_status, updated_at = now() where account_id = $1 and id = $2', [ctx.accountId, sh.rows[0].order_id, status]);
-      return evt.rows[0];
+      return { ...evt.rows[0], orderId: sh.rows[0].order_id };
     });
 
+    void pushTinyStatus({ accountId: ctx.accountId, orderId: result.orderId, status });
     await logAudit({ accountId: ctx.accountId, userId: ctx.userId, entity: 'tracking_event', entityId: result.id, action: 'manual_tracking', afterData: { status, receiver }, correlationId: ctx.correlationId });
     return { ...result, correlationId: ctx.correlationId };
   }));
