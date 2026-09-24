@@ -190,7 +190,7 @@ td .sub { display: block; color: var(--muted); font-size: 12px; }
 
 /* ---------- Modal ---------- */
 .modal-backdrop { position: fixed; inset: 0; background: rgba(15, 27, 45, .45); display: flex; justify-content: center; align-items: flex-start; padding: 40px 16px; z-index: 50; overflow-y: auto; }
-.modal { width: min(860px, 100%); background: var(--surface); border-radius: 12px; box-shadow: 0 20px 50px rgba(15, 27, 45, .25); }
+.modal { width: min(960px, 100%); background: var(--surface); border-radius: 12px; box-shadow: 0 20px 50px rgba(15, 27, 45, .25); }
 .modal.sm { width: min(520px, 100%); }
 .modal .panel-head h3 { font-size: 17px; }
 
@@ -279,3 +279,53 @@ td .sub { display: block; color: var(--muted); font-size: 12px; }
 .num-unit { display: flex; gap: 6px; }
 .num-unit .input { flex: 1; min-width: 0; }
 .num-unit .select { width: 84px; flex-shrink: 0; }
+
+/* ---------- Gráficos ---------- */
+.chart { width: 100%; }
+.chart-plot { position: relative; display: flex; padding-left: 44px; }
+.chart-grid { position: absolute; inset: 0 0 0 44px; display: flex; flex-direction: column; justify-content: space-between; pointer-events: none; }
+.chart-grid > div { border-top: 1px solid var(--line); position: relative; height: 0; }
+.chart-grid span { position: absolute; left: -44px; top: -8px; width: 38px; text-align: right; font-size: 11px; color: var(--faint); }
+.chart-bars { position: relative; display: flex; align-items: flex-end; width: 100%; height: 100%; }
+.chart-slot { position: relative; height: 100%; display: flex; align-items: flex-end; justify-content: center; padding: 0 1px; }
+.chart-bar { width: 70%; max-width: 48px; min-height: 1px; background: var(--brand); border-radius: 4px 4px 0 0; transition: opacity .1s; }
+.chart-bars:hover .chart-bar:not(.hover) { opacity: .55; }
+.chart-tip { position: absolute; bottom: calc(100% + 4px); left: 50%; transform: translateX(-50%); background: var(--text); color: #fff; border-radius: 6px; padding: 4px 8px; font-size: 12px; white-space: nowrap; z-index: 5; display: grid; }
+.chart-tip span { color: #c9d3e3; font-size: 11px; }
+.chart-axis { display: flex; padding-left: 44px; margin-top: 4px; }
+.chart-axis span { text-align: center; font-size: 11.5px; color: var(--muted); }
+
+.ufmap { display: grid; gap: 10px; }
+.ufmap-grid { position: relative; display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); grid-auto-rows: minmax(34px, 1fr); gap: 3px; max-width: 420px; margin: 0 auto; width: 100%; }
+.uf-tile { border: 0; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer; aspect-ratio: 1.15; }
+.uf-tile.empty { background: var(--gray-soft); color: var(--faint) !important; }
+.uf-tile:hover, .uf-tile:focus-visible { outline: 2px solid var(--text); outline-offset: 1px; }
+.uf-tile.selected { outline: 3px solid #eb6834; outline-offset: 1px; }
+.ufmap-tip { position: absolute; top: 0; right: 0; background: var(--text); color: #fff; padding: 6px 10px; border-radius: 8px; font-size: 12.5px; max-width: 200px; z-index: 5; }
+.ufmap-tip .muted { color: #c9d3e3; }
+.ufmap-legend { display: grid; gap: 4px; justify-items: center; }
+.ufmap-scale { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; justify-content: center; }
+.swatch-wrap { display: inline-flex; align-items: center; gap: 4px; }
+.swatch { display: inline-block; width: 14px; height: 14px; border-radius: 3px; }
+.swatch.empty { background: var(--gray-soft); }
+
+/* Cartões clicáveis da torre de controle */
+.tower-grid { display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); }
+.tower-card { text-align: left; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 14px; cursor: pointer; box-shadow: var(--shadow); display: grid; gap: 2px; }
+.tower-card:hover { border-color: var(--brand); }
+.tower-card small { color: var(--muted); font-size: 12.5px; min-height: 2.5em; }
+.tower-card strong { font-size: 24px; line-height: 1.2; }
+.tower-card .pct { font-size: 12px; color: var(--faint); }
+.tower-card .meter { height: 4px; background: var(--gray-soft); border-radius: 99px; overflow: hidden; margin-top: 4px; }
+.tower-card .meter span { display: block; height: 100%; border-radius: 99px; }
+.tower-card.good strong { color: var(--green); } .tower-card.good .meter span { background: var(--green); }
+.tower-card.bad strong { color: var(--red); } .tower-card.bad .meter span { background: var(--red); }
+.tower-card.warn strong { color: var(--amber); } .tower-card.warn .meter span { background: var(--amber); }
+.tower-card.info strong { color: var(--blue); } .tower-card.info .meter span { background: var(--blue); }
+.tower-card.neutral .meter span { background: var(--faint); }
+.day-table td.today, .day-table th.today { background: var(--brand-soft) !important; font-weight: 600; }
+.three-col { display: grid; gap: 16px; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+@media (max-width: 1100px) { .three-col { grid-template-columns: minmax(0, 1fr); } }
+
+.stat-card strong.money-kpi { font-size: 22px; white-space: nowrap; }
+@media (max-width: 640px) { .stat-card strong.money-kpi { font-size: 16px; } }
